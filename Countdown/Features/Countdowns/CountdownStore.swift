@@ -88,14 +88,18 @@ final class CountdownStore {
     func updateCountdown(
         _ snapshot: CountdownSnapshot,
         title: String,
-        targetDate: Date
+        targetDate: Date,
+        colorName: String,
+        symbolName: String
     ) async {
         await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
             let updated = try await actor.updateCountdown(
                 id: snapshot.id,
                 title: title,
-                targetDate: targetDate
+                targetDate: targetDate,
+                colorName: colorName,
+                symbolName: symbolName
             )
             selectedID = updated.id
             await scheduleNotification(for: updated)

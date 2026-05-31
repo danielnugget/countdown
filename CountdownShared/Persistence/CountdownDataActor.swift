@@ -70,6 +70,8 @@ public actor CountdownDataActor {
         id: UUID,
         title: String,
         targetDate: Date,
+        colorName: String,
+        symbolName: String,
         now: Date = Date()
     ) throws -> CountdownSnapshot {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -87,6 +89,8 @@ public actor CountdownDataActor {
         item.quickDurationSeconds = nil
         item.pausedRemainingSeconds = nil
         item.completedAt = nil
+        item.colorName = colorName
+        item.symbolName = symbolName
         item.updatedAt = now
         try modelContext.save()
         return item.snapshot(now: now)

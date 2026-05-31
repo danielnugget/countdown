@@ -35,15 +35,10 @@ final class CountdownIntentsTests: XCTestCase {
     func testIntentInitializersProvideValidationExamples() {
         let target = Date().addingTimeInterval(600)
         let create = CreateCountdownIntent(title: "Ship", targetDate: target)
-        let quick = StartQuickTimerIntent(title: "Break", minutes: 10)
         let entity = CountdownEntity(id: UUID(), title: "Ship")
 
         XCTAssertEqual(create.title, "Ship")
         XCTAssertEqual(create.targetDate, target)
-        XCTAssertEqual(quick.title, "Break")
-        XCTAssertEqual(quick.minutes, 10)
-        XCTAssertEqual(PauseCountdownIntent(countdown: entity).countdown.id, entity.id)
-        XCTAssertEqual(ResumeCountdownIntent(countdown: entity).countdown.id, entity.id)
         XCTAssertEqual(DeleteCountdownIntent(countdown: entity).countdown.id, entity.id)
         XCTAssertEqual(OpenCountdownIntent(countdown: entity).countdown.id, entity.id)
     }

@@ -44,9 +44,10 @@ private struct CountdownDetailView: View {
                         .frame(width: 170, height: 170)
 
                         VStack(alignment: .leading, spacing: 16) {
-                            Label(liveSnapshot.status.title, systemImage: liveSnapshot.symbolName)
-                                .font(.headline)
+                            Image(systemName: liveSnapshot.symbolName)
+                                .font(.title2)
                                 .foregroundStyle(liveSnapshot.colorName.countdownColor)
+                                .accessibilityHidden(true)
 
                             Text(liveSnapshot.title)
                                 .font(.system(size: 38, weight: .semibold, design: .rounded))
@@ -106,10 +107,12 @@ private struct CountdownDetailView: View {
                     .foregroundStyle(.secondary)
                 Text(snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
             }
-            GridRow {
-                Text("Status")
-                    .foregroundStyle(.secondary)
-                Text(snapshot.status.title)
+            if snapshot.status == .expired {
+                GridRow {
+                    Text("Status")
+                        .foregroundStyle(.secondary)
+                    Text("Finished")
+                }
             }
             GridRow {
                 Text("Progress")

@@ -72,6 +72,6 @@ private struct CountdownSidebarRow: View {
             return "Finished"
         }
 
-        return "\(snapshot.status.title) - \(CountdownFormatter.string(remainingSeconds: snapshot.remainingSeconds))"
+        return CountdownFormatter.string(remainingSeconds: snapshot.remainingSeconds)
     }
 }

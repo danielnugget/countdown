@@ -31,6 +31,17 @@ struct CountdownEditorRequest {
 private struct CountdownEditorSymbol: Identifiable {
     let id: String
     let title: String
+    let keywords: [String]
+
+    func matches(_ query: String) -> Bool {
+        guard !query.isEmpty else {
+            return true
+        }
+
+        return title.localizedCaseInsensitiveContains(query)
+            || id.localizedCaseInsensitiveContains(query)
+            || keywords.contains { $0.localizedCaseInsensitiveContains(query) }
+    }
 }
 
 struct CountdownEditorView: View {
@@ -42,42 +53,73 @@ struct CountdownEditorView: View {
     @State private var targetDate: Date
     @State private var colorName: String
     @State private var symbolName: String
+    @State private var symbolSearchText = ""
 
     private let colors = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "cyan", "brown", "gray"]
     private let symbols = [
-        CountdownEditorSymbol(id: "calendar", title: "Calendar"),
-        CountdownEditorSymbol(id: "timer", title: "Timer"),
-        CountdownEditorSymbol(id: "hourglass", title: "Hourglass"),
-        CountdownEditorSymbol(id: "flag.checkered", title: "Goal"),
-        CountdownEditorSymbol(id: "bell", title: "Reminder"),
-        CountdownEditorSymbol(id: "alarm", title: "Alarm"),
-        CountdownEditorSymbol(id: "birthday.cake", title: "Birthday"),
-        CountdownEditorSymbol(id: "gift", title: "Gift"),
-        CountdownEditorSymbol(id: "sparkles", title: "Special"),
-        CountdownEditorSymbol(id: "star", title: "Star"),
-        CountdownEditorSymbol(id: "heart", title: "Heart"),
-        CountdownEditorSymbol(id: "briefcase", title: "Work"),
-        CountdownEditorSymbol(id: "graduationcap", title: "School"),
-        CountdownEditorSymbol(id: "book", title: "Reading"),
-        CountdownEditorSymbol(id: "airplane", title: "Travel"),
-        CountdownEditorSymbol(id: "car", title: "Car"),
-        CountdownEditorSymbol(id: "bicycle", title: "Bike"),
-        CountdownEditorSymbol(id: "tram", title: "Transit"),
-        CountdownEditorSymbol(id: "mappin.and.ellipse", title: "Location"),
-        CountdownEditorSymbol(id: "globe", title: "World"),
-        CountdownEditorSymbol(id: "house", title: "Home"),
-        CountdownEditorSymbol(id: "building.2", title: "Office"),
-        CountdownEditorSymbol(id: "sportscourt", title: "Sports"),
-        CountdownEditorSymbol(id: "dumbbell", title: "Workout"),
-        CountdownEditorSymbol(id: "gamecontroller", title: "Gaming"),
-        CountdownEditorSymbol(id: "music.note", title: "Music"),
-        CountdownEditorSymbol(id: "film", title: "Film"),
-        CountdownEditorSymbol(id: "camera", title: "Camera"),
-        CountdownEditorSymbol(id: "bolt", title: "Energy"),
-        CountdownEditorSymbol(id: "leaf", title: "Nature"),
-        CountdownEditorSymbol(id: "pawprint", title: "Pets")
+        CountdownEditorSymbol(id: "calendar", title: "Calendar", keywords: ["date", "event", "schedule"]),
+        CountdownEditorSymbol(id: "calendar.badge.clock", title: "Deadline", keywords: ["date", "time", "schedule"]),
+        CountdownEditorSymbol(id: "clock", title: "Clock", keywords: ["time"]),
+        CountdownEditorSymbol(id: "timer", title: "Timer", keywords: ["time"]),
+        CountdownEditorSymbol(id: "hourglass", title: "Hourglass", keywords: ["time", "waiting"]),
+        CountdownEditorSymbol(id: "flag.checkered", title: "Goal", keywords: ["finish", "race"]),
+        CountdownEditorSymbol(id: "flag", title: "Milestone", keywords: ["goal", "marker"]),
+        CountdownEditorSymbol(id: "bell", title: "Reminder", keywords: ["alert", "notification"]),
+        CountdownEditorSymbol(id: "alarm", title: "Alarm", keywords: ["alert", "wake"]),
+        CountdownEditorSymbol(id: "birthday.cake", title: "Birthday", keywords: ["party", "celebration"]),
+        CountdownEditorSymbol(id: "party.popper", title: "Celebration", keywords: ["party", "special"]),
+        CountdownEditorSymbol(id: "gift", title: "Gift", keywords: ["present", "holiday"]),
+        CountdownEditorSymbol(id: "sparkles", title: "Special", keywords: ["celebration", "magic"]),
+        CountdownEditorSymbol(id: "star", title: "Star", keywords: ["favorite", "important"]),
+        CountdownEditorSymbol(id: "heart", title: "Heart", keywords: ["love", "health"]),
+        CountdownEditorSymbol(id: "briefcase", title: "Work", keywords: ["job", "business"]),
+        CountdownEditorSymbol(id: "building.2", title: "Office", keywords: ["work", "business"]),
+        CountdownEditorSymbol(id: "graduationcap", title: "School", keywords: ["education", "study"]),
+        CountdownEditorSymbol(id: "book", title: "Reading", keywords: ["study", "library"]),
+        CountdownEditorSymbol(id: "pencil.and.outline", title: "Writing", keywords: ["creative", "notes"]),
+        CountdownEditorSymbol(id: "checklist", title: "Checklist", keywords: ["task", "todo"]),
+        CountdownEditorSymbol(id: "airplane", title: "Travel", keywords: ["flight", "trip"]),
+        CountdownEditorSymbol(id: "suitcase", title: "Trip", keywords: ["travel", "vacation"]),
+        CountdownEditorSymbol(id: "car", title: "Car", keywords: ["drive", "road"]),
+        CountdownEditorSymbol(id: "bicycle", title: "Bike", keywords: ["cycling", "ride"]),
+        CountdownEditorSymbol(id: "tram", title: "Transit", keywords: ["train", "commute"]),
+        CountdownEditorSymbol(id: "mappin.and.ellipse", title: "Location", keywords: ["place", "map"]),
+        CountdownEditorSymbol(id: "globe", title: "World", keywords: ["travel", "global"]),
+        CountdownEditorSymbol(id: "house", title: "Home", keywords: ["family", "move"]),
+        CountdownEditorSymbol(id: "sportscourt", title: "Sports", keywords: ["game", "match"]),
+        CountdownEditorSymbol(id: "soccerball", title: "Match", keywords: ["sports", "game"]),
+        CountdownEditorSymbol(id: "dumbbell", title: "Workout", keywords: ["fitness", "gym"]),
+        CountdownEditorSymbol(id: "figure.run", title: "Race", keywords: ["fitness", "running"]),
+        CountdownEditorSymbol(id: "gamecontroller", title: "Gaming", keywords: ["play", "release"]),
+        CountdownEditorSymbol(id: "music.note", title: "Music", keywords: ["concert", "song"]),
+        CountdownEditorSymbol(id: "theatermasks", title: "Show", keywords: ["theater", "performance"]),
+        CountdownEditorSymbol(id: "film", title: "Film", keywords: ["movie", "cinema"]),
+        CountdownEditorSymbol(id: "camera", title: "Camera", keywords: ["photo", "shoot"]),
+        CountdownEditorSymbol(id: "paintpalette", title: "Art", keywords: ["creative", "design"]),
+        CountdownEditorSymbol(id: "bolt", title: "Energy", keywords: ["power", "launch"]),
+        CountdownEditorSymbol(id: "flame", title: "Launch", keywords: ["release", "energy"]),
+        CountdownEditorSymbol(id: "leaf", title: "Nature", keywords: ["garden", "outdoor"]),
+        CountdownEditorSymbol(id: "sun.max", title: "Sun", keywords: ["summer", "day"]),
+        CountdownEditorSymbol(id: "moon", title: "Moon", keywords: ["night"]),
+        CountdownEditorSymbol(id: "snowflake", title: "Winter", keywords: ["snow", "holiday"]),
+        CountdownEditorSymbol(id: "drop", title: "Water", keywords: ["health", "habit"]),
+        CountdownEditorSymbol(id: "fork.knife", title: "Dinner", keywords: ["food", "restaurant"]),
+        CountdownEditorSymbol(id: "cup.and.saucer", title: "Coffee", keywords: ["drink", "cafe"]),
+        CountdownEditorSymbol(id: "cart", title: "Shopping", keywords: ["store", "buy"]),
+        CountdownEditorSymbol(id: "creditcard", title: "Payment", keywords: ["money", "bill"]),
+        CountdownEditorSymbol(id: "banknote", title: "Money", keywords: ["finance", "budget"]),
+        CountdownEditorSymbol(id: "stethoscope", title: "Health", keywords: ["doctor", "medical"]),
+        CountdownEditorSymbol(id: "cross.case", title: "Appointment", keywords: ["health", "medical"]),
+        CountdownEditorSymbol(id: "wrench.and.screwdriver", title: "Project", keywords: ["tools", "repair"]),
+        CountdownEditorSymbol(id: "shippingbox", title: "Delivery", keywords: ["package", "mail"]),
+        CountdownEditorSymbol(id: "envelope", title: "Mail", keywords: ["message", "letter"]),
+        CountdownEditorSymbol(id: "phone", title: "Call", keywords: ["contact", "meeting"]),
+        CountdownEditorSymbol(id: "person.2", title: "People", keywords: ["friends", "family"]),
+        CountdownEditorSymbol(id: "person.crop.circle.badge.checkmark", title: "Appointment", keywords: ["person", "meeting"]),
+        CountdownEditorSymbol(id: "lock", title: "Secure", keywords: ["private", "deadline"])
     ]
-    private let symbolColumns = Array(repeating: GridItem(.fixed(40), spacing: 8), count: 7)
+    private let colorColumns = [GridItem(.adaptive(minimum: 28, maximum: 28), spacing: 12)]
+    private let symbolColumns = [GridItem(.adaptive(minimum: 40, maximum: 40), spacing: 8)]
 
     init(
         mode: CountdownEditorMode,
@@ -127,7 +169,7 @@ struct CountdownEditorView: View {
                 }
 
                 field("Color") {
-                    HStack(spacing: 12) {
+                    LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 12) {
                         ForEach(colors, id: \.self) { color in
                             colorButton(color)
                         }
@@ -135,9 +177,27 @@ struct CountdownEditorView: View {
                 }
 
                 field("Symbol") {
-                    LazyVGrid(columns: symbolColumns, alignment: .leading, spacing: 8) {
-                        ForEach(symbols) { symbol in
-                            symbolButton(symbol)
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Search symbols", text: $symbolSearchText)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Search symbols")
+
+                        ScrollView {
+                            LazyVGrid(columns: symbolColumns, alignment: .leading, spacing: 8) {
+                                ForEach(filteredSymbols) { symbol in
+                                    symbolButton(symbol)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 2)
+                        }
+                        .frame(maxHeight: 176)
+                        .accessibilityLabel("Symbol options")
+
+                        if filteredSymbols.isEmpty {
+                            Text("No matching symbols")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -166,7 +226,7 @@ struct CountdownEditorView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
         }
-        .frame(width: 460)
+        .frame(width: 520)
     }
 
     private var header: some View {
@@ -197,6 +257,11 @@ struct CountdownEditorView: View {
         case .edit:
             "Update countdown details."
         }
+    }
+
+    private var filteredSymbols: [CountdownEditorSymbol] {
+        let query = symbolSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return symbols.filter { $0.matches(query) }
     }
 
     private func field<Content: View>(
@@ -258,4 +323,3 @@ struct CountdownEditorView: View {
         .accessibilityAddTraits(symbolName == symbol.id ? .isSelected : [])
     }
 }
-

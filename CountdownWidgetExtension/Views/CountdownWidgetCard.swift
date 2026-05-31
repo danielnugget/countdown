@@ -32,7 +32,7 @@ public struct CountdownWidgetCard: View {
                 .font(.system(size: 26, weight: .semibold, design: .rounded))
                 .minimumScaleFactor(0.65)
                 .lineLimit(1)
-            statusLine
+            finishedStatusLine
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
@@ -48,7 +48,7 @@ public struct CountdownWidgetCard: View {
                     .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
-                statusLine
+                finishedStatusLine
             }
             Spacer(minLength: 0)
         }
@@ -72,7 +72,7 @@ public struct CountdownWidgetCard: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                statusLine
+                finishedStatusLine
                 Text(snapshot.targetDate, style: .date)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -111,15 +111,18 @@ public struct CountdownWidgetCard: View {
         }
     }
 
-    private var statusLine: some View {
+    @ViewBuilder
+    private var finishedStatusLine: some View {
         let resolvedSnapshot = snapshot.recalculated(now: Date())
-        return Text(resolvedSnapshot.status == .expired ? "Finished" : resolvedSnapshot.status.title)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel(CountdownFormatter.accessibilityString(
-                remainingSeconds: resolvedSnapshot.remainingSeconds,
-                status: resolvedSnapshot.status
-            ))
+        if resolvedSnapshot.status == .expired {
+            Text("Finished")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(CountdownFormatter.accessibilityString(
+                    remainingSeconds: resolvedSnapshot.remainingSeconds,
+                    status: resolvedSnapshot.status
+                ))
+        }
     }
 
     private var accentColor: Color {

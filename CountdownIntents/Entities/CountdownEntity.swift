@@ -28,8 +28,16 @@ public struct CountdownEntity: AppEntity, Codable, Hashable, Sendable {
     public var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
             title: "\(title)",
-            subtitle: subtitle.isEmpty ? "\(status.title)" : "\(subtitle) - \(status.title)"
+            subtitle: "\(displaySubtitle)"
         )
+    }
+
+    private var displaySubtitle: String {
+        if status == .expired {
+            return subtitle.isEmpty ? "Finished" : "\(subtitle) - Finished"
+        }
+
+        return subtitle
     }
 }
 

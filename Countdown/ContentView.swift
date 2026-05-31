@@ -87,7 +87,9 @@ struct ContentView: View {
             await store.updateCountdown(
                 snapshot,
                 title: request.title,
-                targetDate: request.targetDate
+                targetDate: request.targetDate,
+                colorName: request.colorName,
+                symbolName: request.symbolName
             )
         }
     }
