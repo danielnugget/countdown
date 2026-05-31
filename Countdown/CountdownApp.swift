@@ -62,19 +62,6 @@ struct CountdownApp: App {
                 .environment(store)
                 .preferredColorScheme(store.settings.themePreference.colorScheme)
         }
-
-        MenuBarExtra(
-            "Countdown",
-            systemImage: "calendar",
-            isInserted: Binding(
-                get: { store.settings.showsMenuBarExtra },
-                set: { store.setMenuBarExtraVisibility($0) }
-            )
-        ) {
-            MenuBarCountdownView()
-                .environment(store)
-        }
-        .menuBarExtraStyle(.menu)
     }
 }
 

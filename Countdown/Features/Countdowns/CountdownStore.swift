@@ -131,12 +131,6 @@ final class CountdownStore {
         WidgetCenter.shared.reloadTimelines(ofKind: CountdownConstants.widgetKind)
     }
 
-    func setMenuBarExtraVisibility(_ isVisible: Bool) {
-        var updated = settings
-        updated.showsMenuBarExtra = isVisible
-        updateSettings(updated)
-    }
-
     private func mutate(_ operation: () async throws -> Void) async {
         do {
             try await operation()

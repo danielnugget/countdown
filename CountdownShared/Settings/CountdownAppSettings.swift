@@ -35,18 +35,15 @@ public enum CountdownDisplayPrecision: String, Codable, CaseIterable, Identifiab
 public struct CountdownAppSettings: Codable, Equatable, Sendable {
     public var notificationsEnabled: Bool
     public var themePreference: CountdownThemePreference
-    public var showsMenuBarExtra: Bool
     public var displayPrecision: CountdownDisplayPrecision
 
     public init(
         notificationsEnabled: Bool = true,
         themePreference: CountdownThemePreference = .system,
-        showsMenuBarExtra: Bool = true,
         displayPrecision: CountdownDisplayPrecision = .automatic
     ) {
         self.notificationsEnabled = notificationsEnabled
         self.themePreference = themePreference
-        self.showsMenuBarExtra = showsMenuBarExtra
         self.displayPrecision = displayPrecision
     }
 }

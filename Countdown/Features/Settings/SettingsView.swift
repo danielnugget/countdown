@@ -26,9 +26,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Quick Access") {
-                Toggle("Show menu bar countdown", isOn: $store.settings.showsMenuBarExtra)
-            }
         }
         .formStyle(.grouped)
         .padding(20)
