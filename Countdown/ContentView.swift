@@ -12,27 +12,20 @@ struct ContentView: View {
         NavigationSplitView {
             CountdownFilterSidebarView(
                 isShowingOverview: store.isShowingOverview,
-                statusFilter: store.statusFilter,
-                selectedTags: store.selectedTags,
                 allCount: store.allSnapshots.count,
-                upcomingCount: store.upcomingCount,
-                finishedCount: store.finishedCount,
-                tags: store.availableTags,
-                tagCount: { store.count(for: $0) },
+                collections: store.availableCollections,
+                collectionCount: { store.count(forCollection: $0) },
+                selectedCollectionName: store.selectedCollectionName,
                 onShowDashboard: {
                     store.showDashboard()
                     Task { await store.refresh() }
                 },
-                onSelectStatus: { filter in
-                    store.setStatusFilter(filter)
-                    Task { await store.refresh() }
-                },
-                onSelectTag: { tag in
-                    store.setTagFilter(tag)
-                    Task { await store.refresh() }
-                },
-                onClearFilters: {
+                onShowCountdowns: {
                     store.clearFilters()
+                    Task { await store.refresh() }
+                },
+                onSelectCollection: { collectionName in
+                    store.setCollectionFilter(collectionName)
                     Task { await store.refresh() }
                 }
             )
@@ -63,7 +56,23 @@ struct ContentView: View {
                         sort: $store.sort,
                         filterTitle: filterTitle,
                         searchText: store.searchText,
+                        statusFilter: store.statusFilter,
+                        selectedTags: store.selectedTags,
+                        selectedCollectionName: store.selectedCollectionName,
+                        tags: store.availableTags,
+                        allCount: store.allSnapshots.count,
+                        upcomingCount: store.upcomingCount,
+                        finishedCount: store.finishedCount,
+                        tagCount: { store.count(for: $0) },
                         onCreate: { editorMode = .createDate },
+                        onSelectStatus: { filter in
+                            store.setStatusFilter(filter)
+                            Task { await store.refresh() }
+                        },
+                        onSelectTag: { tag in
+                            store.setTagFilter(tag)
+                            Task { await store.refresh() }
+                        },
                         onClearFilters: {
                             store.clearFilters()
                             Task { await store.refresh() }
@@ -120,7 +129,7 @@ struct ContentView: View {
             editorMode = .createDate
         }
         .sheet(item: $editorMode) { mode in
-            CountdownEditorView(mode: mode) { request in
+            CountdownEditorView(mode: mode, suggestedCollectionName: store.selectedCollectionName) { request in
                 Task {
                     await save(request)
                     editorMode = nil
@@ -150,7 +159,8 @@ struct ContentView: View {
                 targetDate: request.targetDate,
                 colorName: request.colorName,
                 symbolName: request.symbolName,
-                tags: request.tags
+                tags: request.tags,
+                collectionName: request.collectionName
             )
         case .edit(let snapshot):
             await store.updateCountdown(
@@ -159,12 +169,25 @@ struct ContentView: View {
                 targetDate: request.targetDate,
                 colorName: request.colorName,
                 symbolName: request.symbolName,
-                tags: request.tags
+                tags: request.tags,
+                collectionName: request.collectionName
             )
         }
     }
 
     private var filterTitle: String {
+        if let selectedCollectionName = store.selectedCollectionName {
+            if !store.selectedTags.isEmpty {
+                return "\(selectedCollectionName): \(store.selectedTags.joined(separator: ", "))"
+            }
+
+            if store.statusFilter != .all {
+                return "\(selectedCollectionName): \(store.statusFilter.title)"
+            }
+
+            return selectedCollectionName
+        }
+
         if !store.selectedTags.isEmpty {
             return store.selectedTags.joined(separator: ", ")
         }

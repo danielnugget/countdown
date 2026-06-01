@@ -27,6 +27,7 @@ struct CountdownEditorRequest {
     var colorName: String
     var symbolName: String
     var tags: [String]
+    var collectionName: String?
 }
 
 private struct CountdownEditorSymbol: Identifiable {
@@ -55,6 +56,7 @@ struct CountdownEditorView: View {
     @State private var colorName: String
     @State private var symbolName: String
     @State private var tags: [String]
+    @State private var collectionName: String
     @State private var tagDraft = ""
     @State private var symbolSearchText = ""
 
@@ -126,6 +128,7 @@ struct CountdownEditorView: View {
 
     init(
         mode: CountdownEditorMode,
+        suggestedCollectionName: String? = nil,
         onSave: @escaping (CountdownEditorRequest) -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -140,12 +143,14 @@ struct CountdownEditorView: View {
             _colorName = State(initialValue: "blue")
             _symbolName = State(initialValue: "calendar")
             _tags = State(initialValue: [])
+            _collectionName = State(initialValue: suggestedCollectionName ?? "")
         case .edit(let snapshot):
             _title = State(initialValue: snapshot.title)
             _targetDate = State(initialValue: max(snapshot.targetDate, Date().addingTimeInterval(60)))
             _colorName = State(initialValue: snapshot.colorName)
             _symbolName = State(initialValue: snapshot.symbolName == "timer" ? "calendar" : snapshot.symbolName)
             _tags = State(initialValue: snapshot.tags)
+            _collectionName = State(initialValue: snapshot.collectionName ?? "")
         }
     }
 
@@ -173,6 +178,12 @@ struct CountdownEditorView: View {
                     )
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                field("Collection") {
+                    TextField("Collection name", text: $collectionName)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Collection name")
                 }
 
                 field("Color") {
@@ -262,7 +273,8 @@ struct CountdownEditorView: View {
                         targetDate: targetDate,
                         colorName: colorName,
                         symbolName: symbolName,
-                        tags: CountdownTagNormalizer.normalize(tags)
+                        tags: CountdownTagNormalizer.normalize(tags),
+                        collectionName: CountdownCollectionNormalizer.normalize(collectionName)
                     ))
                 }
                 .keyboardShortcut(.defaultAction)
@@ -302,6 +314,10 @@ struct CountdownEditorView: View {
 
                 if !tags.isEmpty {
                     FlowTagRow(tags: tags, limit: 4)
+                }
+
+                if let collectionName = CountdownCollectionNormalizer.normalize(collectionName) {
+                    CountdownTagChip(title: collectionName, systemImage: "folder")
                 }
             }
 

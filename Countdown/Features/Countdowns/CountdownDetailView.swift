@@ -434,6 +434,9 @@ private struct CountdownDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Schedule", systemImage: "calendar")
                     .font(.headline)
+                if let collectionName = snapshot.collectionName {
+                    DetailLine(title: "Collection", value: collectionName)
+                }
                 DetailLine(title: "Target", value: snapshot.targetDate.formatted(date: .abbreviated, time: .shortened))
                 DetailLine(title: "Created", value: snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
                 DetailLine(title: "Updated", value: snapshot.updatedAt.formatted(date: .abbreviated, time: .shortened))

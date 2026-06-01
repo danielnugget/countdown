@@ -173,6 +173,12 @@ test: add coverage for markExpiredCountdowns
 
 ---
 
+## README.md
+
+After completing a task which has made a major change to the app’s functionality, update the README to reflect this.
+
+---
+
 ## When In Doubt
 
 If a request is ambiguous, would require architectural changes, or touches entitlements/the app entry point — stop and ask. Do not guess.

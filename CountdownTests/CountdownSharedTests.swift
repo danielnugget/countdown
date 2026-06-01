@@ -122,6 +122,15 @@ final class CountdownSharedTests: XCTestCase {
         XCTAssertEqual(tags, ["home", "Travel", "Work"])
     }
 
+    func testCollectionNormalizationTrimsAndDropsEmptyNames() {
+        XCTAssertEqual(CountdownCollectionNormalizer.normalize(" Travel "), "Travel")
+        XCTAssertNil(CountdownCollectionNormalizer.normalize("   "))
+        XCTAssertEqual(
+            CountdownCollectionNormalizer.normalize([" Work ", "work", "", "Personal"]),
+            ["Personal", "Work"]
+        )
+    }
+
     func testCreateAndUpdatePersistTags() async throws {
         let container = try CountdownContainerFactory.makeInMemoryContainer()
         let actor = CountdownDataActor(modelContainer: container)
@@ -150,6 +159,49 @@ final class CountdownSharedTests: XCTestCase {
         XCTAssertEqual(updated.tags, ["Personal", "travel"])
     }
 
+    func testCreateAndUpdatePersistCollection() async throws {
+        let container = try CountdownContainerFactory.makeInMemoryContainer()
+        let actor = CountdownDataActor(modelContainer: container)
+        let now = Date(timeIntervalSinceReferenceDate: 55_000)
+        let target = now.addingTimeInterval(3_600)
+
+        let created = try await actor.createCountdown(
+            title: "Conference",
+            targetDate: target,
+            collectionName: " Work ",
+            now: now
+        )
+        defer {
+            CountdownCollectionStore().removeCollection(for: created.id)
+        }
+
+        XCTAssertEqual(created.collectionName, "Work")
+
+        let updated = try await actor.updateCountdown(
+            id: created.id,
+            title: "Conference",
+            targetDate: target.addingTimeInterval(3_600),
+            colorName: "blue",
+            symbolName: "calendar",
+            collectionName: "Travel",
+            now: now
+        )
+
+        XCTAssertEqual(updated.collectionName, "Travel")
+
+        let cleared = try await actor.updateCountdown(
+            id: created.id,
+            title: "Conference",
+            targetDate: target.addingTimeInterval(7_200),
+            colorName: "blue",
+            symbolName: "calendar",
+            collectionName: " ",
+            now: now
+        )
+
+        XCTAssertNil(cleared.collectionName)
+    }
+
     func testSnapshotsFilterBySelectedTags() async throws {
         let container = try CountdownContainerFactory.makeInMemoryContainer()
         let actor = CountdownDataActor(modelContainer: container)
@@ -173,6 +225,32 @@ final class CountdownSharedTests: XCTestCase {
 
         let workAndQuarter = try await actor.snapshots(now: now, filter: CountdownFilter(tags: ["q1", "WORK"]))
         XCTAssertEqual(workAndQuarter.map(\.title), ["Launch"])
+    }
+
+    func testSnapshotsFilterByCollection() async throws {
+        let container = try CountdownContainerFactory.makeInMemoryContainer()
+        let actor = CountdownDataActor(modelContainer: container)
+        let now = Date(timeIntervalSinceReferenceDate: 65_000)
+
+        let launch = try await actor.createCountdown(
+            title: "Launch",
+            targetDate: now.addingTimeInterval(3_600),
+            collectionName: "Work",
+            now: now
+        )
+        let dinner = try await actor.createCountdown(
+            title: "Dinner",
+            targetDate: now.addingTimeInterval(7_200),
+            collectionName: "Personal",
+            now: now
+        )
+        defer {
+            CountdownCollectionStore().removeCollection(for: launch.id)
+            CountdownCollectionStore().removeCollection(for: dinner.id)
+        }
+
+        let work = try await actor.snapshots(now: now, filter: CountdownFilter(collectionName: "work"))
+        XCTAssertEqual(work.map(\.title), ["Launch"])
     }
 
     func testSnapshotsCombineSearchStatusAndSort() async throws {

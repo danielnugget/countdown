@@ -4,17 +4,13 @@ import SwiftUI
 
 struct CountdownFilterSidebarView: View {
     let isShowingOverview: Bool
-    let statusFilter: CountdownStatusFilter
-    let selectedTags: [String]
     let allCount: Int
-    let upcomingCount: Int
-    let finishedCount: Int
-    let tags: [String]
-    let tagCount: (String) -> Int
+    let collections: [String]
+    let collectionCount: (String) -> Int
+    let selectedCollectionName: String?
     let onShowDashboard: () -> Void
-    let onSelectStatus: (CountdownStatusFilter) -> Void
-    let onSelectTag: (String) -> Void
-    let onClearFilters: () -> Void
+    let onShowCountdowns: () -> Void
+    let onSelectCollection: (String) -> Void
 
     var body: some View {
         List {
@@ -28,59 +24,34 @@ struct CountdownFilterSidebarView: View {
                 )
             }
 
-            Section("Browse") {
+            Section("Library") {
                 FilterSidebarRow(
-                    title: "All",
+                    title: "Countdowns",
                     systemImage: "calendar",
                     count: allCount,
-                    isSelected: !isShowingOverview && statusFilter == .all && selectedTags.isEmpty,
-                    action: { onSelectStatus(.all) }
-                )
-                FilterSidebarRow(
-                    title: "Upcoming",
-                    systemImage: "calendar.badge.clock",
-                    count: upcomingCount,
-                    isSelected: !isShowingOverview && statusFilter == .upcoming,
-                    action: { onSelectStatus(.upcoming) }
-                )
-                FilterSidebarRow(
-                    title: "Finished",
-                    systemImage: "checkmark.circle",
-                    count: finishedCount,
-                    isSelected: !isShowingOverview && statusFilter == .finished,
-                    action: { onSelectStatus(.finished) }
+                    isSelected: !isShowingOverview && selectedCollectionName == nil,
+                    action: onShowCountdowns
                 )
             }
 
-            if !tags.isEmpty {
-                Section("Tags") {
-                    ForEach(tags, id: \.self) { tag in
+            if !collections.isEmpty {
+                Section("Collections") {
+                    ForEach(collections, id: \.self) { collectionName in
                         FilterSidebarRow(
-                            title: tag,
-                            systemImage: "tag",
-                            count: tagCount(tag),
-                            isSelected: !isShowingOverview && selectedTags.contains(tag),
-                            action: { onSelectTag(tag) }
+                            title: collectionName,
+                            systemImage: "folder",
+                            count: collectionCount(collectionName),
+                            isSelected: selectedCollectionName.map {
+                                CountdownCollectionNormalizer.key(for: $0) == CountdownCollectionNormalizer.key(for: collectionName)
+                            } ?? false,
+                            action: { onSelectCollection(collectionName) }
                         )
                     }
-                }
-            }
-
-            if hasActiveFilters {
-                Section {
-                    Button(action: onClearFilters) {
-                        Label("Clear Filters", systemImage: "xmark.circle")
-                    }
-                    .accessibilityLabel("Clear filters")
                 }
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Countdown")
-    }
-
-    private var hasActiveFilters: Bool {
-        !isShowingOverview && (statusFilter != .all || !selectedTags.isEmpty)
     }
 }
 
@@ -123,7 +94,17 @@ struct CountdownListView: View {
     @Binding var sort: CountdownSort
     let filterTitle: String
     let searchText: String
+    let statusFilter: CountdownStatusFilter
+    let selectedTags: [String]
+    let selectedCollectionName: String?
+    let tags: [String]
+    let allCount: Int
+    let upcomingCount: Int
+    let finishedCount: Int
+    let tagCount: (String) -> Int
     let onCreate: () -> Void
+    let onSelectStatus: (CountdownStatusFilter) -> Void
+    let onSelectTag: (String) -> Void
     let onClearFilters: () -> Void
 
     var body: some View {
@@ -200,15 +181,77 @@ struct CountdownListView: View {
 
                 Spacer(minLength: 0)
 
-                Button(action: onClearFilters) {
+                Menu {
+                    Section("Status") {
+                        ForEach(CountdownStatusFilter.allCases) { filter in
+                            Button {
+                                onSelectStatus(filter)
+                            } label: {
+                                Label(
+                                    statusFilterTitle(for: filter),
+                                    systemImage: statusFilter == filter && selectedTags.isEmpty ? "checkmark" : statusFilterIcon(for: filter)
+                                )
+                            }
+                        }
+                    }
+
+                    if !tags.isEmpty {
+                        Section("Tags") {
+                            ForEach(tags, id: \.self) { tag in
+                                Button {
+                                    onSelectTag(tag)
+                                } label: {
+                                    Label(
+                                        "\(tag) (\(tagCount(tag)))",
+                                        systemImage: selectedTags.contains(tag) ? "checkmark" : "tag"
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Section {
+                        Button(action: onClearFilters) {
+                            Label("Clear Filters", systemImage: "xmark.circle")
+                        }
+                        .disabled(!hasActiveFilters && searchText.isEmpty)
+                    }
+                } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
+                        .symbolVariant(hasActiveFilters ? .fill : .none)
                 }
                 .buttonStyle(.borderless)
-                .help("Clear Filters")
-                .accessibilityLabel("Clear filters")
+                .help("Filter Countdowns")
+                .accessibilityLabel("Filter countdowns")
             }
         }
         .padding(14)
+    }
+
+    private var hasActiveFilters: Bool {
+        statusFilter != .all || !selectedTags.isEmpty || selectedCollectionName != nil
+    }
+
+    private func statusFilterTitle(for filter: CountdownStatusFilter) -> String {
+        switch filter {
+        case .all:
+            "\(filter.title) (\(allCount))"
+        case .upcoming:
+            "\(filter.title) (\(upcomingCount))"
+        case .finished:
+            "\(filter.title) (\(finishedCount))"
+        }
+    }
+
+    private func statusFilterIcon(for filter: CountdownStatusFilter) -> String {
+        switch filter {
+        case .all:
+            "calendar"
+        case .upcoming:
+            "calendar.badge.clock"
+        case .finished:
+            "checkmark.circle"
+        }
     }
 }
 

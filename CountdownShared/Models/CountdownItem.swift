@@ -46,7 +46,8 @@ public final class CountdownItem {
 
     public func snapshot(
         now: Date = Date(),
-        tags: [String] = []
+        tags: [String] = [],
+        collectionName: String? = nil
     ) -> CountdownSnapshot {
         let remaining = CountdownCalculator.remainingSeconds(
             targetDate: targetDate,
@@ -85,7 +86,8 @@ public final class CountdownItem {
                 originalDurationSeconds: duration
             ),
             status: status,
-            tags: tags
+            tags: tags,
+            collectionName: collectionName
         )
     }
 }

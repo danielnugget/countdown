@@ -14,6 +14,7 @@ final class CountdownStore {
     var searchText = ""
     var statusFilter: CountdownStatusFilter = .all
     var selectedTags: [String] = []
+    var selectedCollectionName: String?
     var sort: CountdownSort = .targetDate
     var isLoading = false
     var errorMessage: String?
@@ -43,11 +44,15 @@ final class CountdownStore {
     }
 
     var activeFilter: CountdownFilter {
-        CountdownFilter(status: statusFilter, tags: selectedTags)
+        CountdownFilter(status: statusFilter, tags: selectedTags, collectionName: selectedCollectionName)
     }
 
     var availableTags: [String] {
         CountdownTagNormalizer.normalize(allSnapshots.flatMap(\.tags))
+    }
+
+    var availableCollections: [String] {
+        CountdownCollectionNormalizer.normalize(allSnapshots.compactMap(\.collectionName))
     }
 
     var upcomingCount: Int {
@@ -62,6 +67,17 @@ final class CountdownStore {
         let key = CountdownTagNormalizer.key(for: tag)
         return allSnapshots.filter { snapshot in
             snapshot.tags.map(CountdownTagNormalizer.key(for:)).contains(key)
+        }.count
+    }
+
+    func count(forCollection collectionName: String) -> Int {
+        let key = CountdownCollectionNormalizer.key(for: collectionName)
+        return allSnapshots.filter { snapshot in
+            guard let collectionName = snapshot.collectionName else {
+                return false
+            }
+
+            return CountdownCollectionNormalizer.key(for: collectionName) == key
         }.count
     }
 
@@ -94,6 +110,7 @@ final class CountdownStore {
         searchText = ""
         statusFilter = .all
         selectedTags = []
+        selectedCollectionName = nil
         selectedID = nil
     }
 
@@ -111,11 +128,21 @@ final class CountdownStore {
         selectedID = nil
     }
 
+    func setCollectionFilter(_ collectionName: String) {
+        isShowingOverview = false
+        searchText = ""
+        statusFilter = .all
+        selectedTags = []
+        selectedCollectionName = CountdownCollectionNormalizer.normalize(collectionName)
+        selectedID = nil
+    }
+
     func clearFilters() {
         isShowingOverview = false
         searchText = ""
         statusFilter = .all
         selectedTags = []
+        selectedCollectionName = nil
         selectedID = nil
     }
 
@@ -131,7 +158,8 @@ final class CountdownStore {
         targetDate: Date,
         colorName: String,
         symbolName: String,
-        tags: [String]
+        tags: [String],
+        collectionName: String?
     ) async {
         await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
@@ -139,12 +167,14 @@ final class CountdownStore {
             searchText = ""
             statusFilter = .all
             selectedTags = []
+            selectedCollectionName = CountdownCollectionNormalizer.normalize(collectionName)
             let snapshot = try await actor.createCountdown(
                 title: title,
                 targetDate: targetDate,
                 colorName: colorName,
                 symbolName: symbolName,
-                tags: tags
+                tags: tags,
+                collectionName: collectionName
             )
             selectedID = snapshot.id
             await scheduleNotification(for: snapshot)
@@ -157,7 +187,8 @@ final class CountdownStore {
         targetDate: Date,
         colorName: String,
         symbolName: String,
-        tags: [String]
+        tags: [String],
+        collectionName: String?
     ) async {
         await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
@@ -167,7 +198,8 @@ final class CountdownStore {
                 targetDate: targetDate,
                 colorName: colorName,
                 symbolName: symbolName,
-                tags: tags
+                tags: tags,
+                collectionName: collectionName
             )
             selectedID = updated.id
             await scheduleNotification(for: updated)
@@ -221,15 +253,28 @@ final class CountdownStore {
     private func filteredSnapshots(from snapshots: [CountdownSnapshot]) -> [CountdownSnapshot] {
         let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedTagKeys = Set(activeFilter.tags.map(CountdownTagNormalizer.key(for:)))
+        let selectedCollectionKey = activeFilter.collectionName.map(CountdownCollectionNormalizer.key(for:))
 
         return snapshots
             .filter { snapshot in
                 normalizedSearch.isEmpty
                     || snapshot.title.localizedCaseInsensitiveContains(normalizedSearch)
                     || snapshot.tags.contains { $0.localizedCaseInsensitiveContains(normalizedSearch) }
+                    || snapshot.collectionName?.localizedCaseInsensitiveContains(normalizedSearch) == true
             }
             .filter { snapshot in
                 activeFilter.status.includes(snapshot.status)
+            }
+            .filter { snapshot in
+                guard let selectedCollectionKey else {
+                    return true
+                }
+
+                guard let collectionName = snapshot.collectionName else {
+                    return false
+                }
+
+                return CountdownCollectionNormalizer.key(for: collectionName) == selectedCollectionKey
             }
             .filter { snapshot in
                 guard !selectedTagKeys.isEmpty else {

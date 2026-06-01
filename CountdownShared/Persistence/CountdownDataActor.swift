@@ -13,20 +13,38 @@ public actor CountdownDataActor {
         let items = try modelContext.fetch(descriptor)
         let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let tagsByID = CountdownTagStore().loadAll()
+        let collectionsByID = CountdownCollectionStore().loadAll()
 
         let snapshots = items.map { item in
-            item.snapshot(now: now, tags: tagsByID[item.id] ?? [])
+            item.snapshot(
+                now: now,
+                tags: tagsByID[item.id] ?? [],
+                collectionName: collectionsByID[item.id]
+            )
         }
         let selectedTagKeys = Set(filter.tags.map(CountdownTagNormalizer.key(for:)))
+        let selectedCollectionKey = filter.collectionName.map(CountdownCollectionNormalizer.key(for:))
 
         return snapshots
             .filter { snapshot in
                 normalizedSearch.isEmpty
                     || snapshot.title.localizedCaseInsensitiveContains(normalizedSearch)
                     || snapshot.tags.contains { $0.localizedCaseInsensitiveContains(normalizedSearch) }
+                    || snapshot.collectionName?.localizedCaseInsensitiveContains(normalizedSearch) == true
             }
             .filter { snapshot in
                 filter.status.includes(snapshot.status)
+            }
+            .filter { snapshot in
+                guard let selectedCollectionKey else {
+                    return true
+                }
+
+                guard let collectionName = snapshot.collectionName else {
+                    return false
+                }
+
+                return CountdownCollectionNormalizer.key(for: collectionName) == selectedCollectionKey
             }
             .filter { snapshot in
                 guard !selectedTagKeys.isEmpty else {
@@ -41,7 +59,11 @@ public actor CountdownDataActor {
 
     public func snapshot(id: UUID, now: Date = Date()) throws -> CountdownSnapshot {
         let item = try item(for: id)
-        return item.snapshot(now: now, tags: CountdownTagStore().tags(for: id))
+        return item.snapshot(
+            now: now,
+            tags: CountdownTagStore().tags(for: id),
+            collectionName: CountdownCollectionStore().collectionName(for: id)
+        )
     }
 
     @discardableResult
@@ -51,6 +73,7 @@ public actor CountdownDataActor {
         colorName: String = "blue",
         symbolName: String = "calendar",
         tags: [String] = [],
+        collectionName: String? = nil,
         now: Date = Date()
     ) throws -> CountdownSnapshot {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -77,7 +100,8 @@ public actor CountdownDataActor {
         modelContext.insert(item)
         try modelContext.save()
         CountdownTagStore().save(tags, for: item.id)
-        return item.snapshot(now: now, tags: tags)
+        CountdownCollectionStore().save(collectionName, for: item.id)
+        return item.snapshot(now: now, tags: tags, collectionName: collectionName)
     }
 
     public func deleteCountdown(id: UUID) throws {
@@ -85,6 +109,7 @@ public actor CountdownDataActor {
         modelContext.delete(item)
         try modelContext.save()
         CountdownTagStore().removeTags(for: id)
+        CountdownCollectionStore().removeCollection(for: id)
     }
 
     @discardableResult
@@ -95,6 +120,7 @@ public actor CountdownDataActor {
         colorName: String,
         symbolName: String,
         tags: [String] = [],
+        collectionName: String? = nil,
         now: Date = Date()
     ) throws -> CountdownSnapshot {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -117,7 +143,8 @@ public actor CountdownDataActor {
         item.updatedAt = now
         try modelContext.save()
         CountdownTagStore().save(tags, for: id)
-        return item.snapshot(now: now, tags: tags)
+        CountdownCollectionStore().save(collectionName, for: id)
+        return item.snapshot(now: now, tags: tags, collectionName: collectionName)
     }
 
     @discardableResult
@@ -137,8 +164,15 @@ public actor CountdownDataActor {
         }
 
         let tagsByID = CountdownTagStore().loadAll()
+        let collectionsByID = CountdownCollectionStore().loadAll()
         return items
-            .map { item in item.snapshot(now: now, tags: tagsByID[item.id] ?? []) }
+            .map { item in
+                item.snapshot(
+                    now: now,
+                    tags: tagsByID[item.id] ?? [],
+                    collectionName: collectionsByID[item.id]
+                )
+            }
             .sorted(by: CountdownSort.targetDate.comparator)
     }
 
