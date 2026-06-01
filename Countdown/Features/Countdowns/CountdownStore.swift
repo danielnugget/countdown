@@ -7,9 +7,14 @@ import WidgetKit
 @MainActor
 @Observable
 final class CountdownStore {
+    var allSnapshots: [CountdownSnapshot] = []
     var snapshots: [CountdownSnapshot] = []
     var selectedID: UUID?
+    var isShowingOverview = true
     var searchText = ""
+    var statusFilter: CountdownStatusFilter = .all
+    var selectedTags: [String] = []
+    var sort: CountdownSort = .targetDate
     var isLoading = false
     var errorMessage: String?
     var settings: CountdownAppSettings
@@ -33,10 +38,31 @@ final class CountdownStore {
     }
 
     var selectedSnapshot: CountdownSnapshot? {
-        guard let selectedID else {
-            return snapshots.first
-        }
-        return snapshots.first { $0.id == selectedID } ?? snapshots.first
+        guard let selectedID else { return nil }
+        return allSnapshots.first { $0.id == selectedID }
+    }
+
+    var activeFilter: CountdownFilter {
+        CountdownFilter(status: statusFilter, tags: selectedTags)
+    }
+
+    var availableTags: [String] {
+        CountdownTagNormalizer.normalize(allSnapshots.flatMap(\.tags))
+    }
+
+    var upcomingCount: Int {
+        allSnapshots.filter { $0.status != .expired }.count
+    }
+
+    var finishedCount: Int {
+        allSnapshots.filter { $0.status == .expired }.count
+    }
+
+    func count(for tag: String) -> Int {
+        let key = CountdownTagNormalizer.key(for: tag)
+        return allSnapshots.filter { snapshot in
+            snapshot.tags.map(CountdownTagNormalizer.key(for:)).contains(key)
+        }.count
     }
 
     func refresh() async {
@@ -45,23 +71,57 @@ final class CountdownStore {
 
         do {
             let actor = CountdownDataActor(modelContainer: modelContainer)
-            snapshots = try await actor.snapshots(searchText: searchText)
+            allSnapshots = try await actor.snapshots(sort: sort)
+            snapshots = filteredSnapshots(from: allSnapshots)
             if let selectedID, snapshots.contains(where: { $0.id == selectedID }) {
                 self.selectedID = selectedID
             } else {
-                selectedID = snapshots.first?.id
+                selectedID = nil
             }
+            errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     func selectCountdown(_ id: UUID) {
+        isShowingOverview = false
         selectedID = id
+    }
+
+    func showDashboard() {
+        isShowingOverview = true
+        searchText = ""
+        statusFilter = .all
+        selectedTags = []
+        selectedID = nil
+    }
+
+    func setStatusFilter(_ filter: CountdownStatusFilter) {
+        isShowingOverview = false
+        statusFilter = filter
+        selectedTags = []
+        selectedID = nil
+    }
+
+    func setTagFilter(_ tag: String) {
+        isShowingOverview = false
+        statusFilter = .all
+        selectedTags = CountdownTagNormalizer.normalize([tag])
+        selectedID = nil
+    }
+
+    func clearFilters() {
+        isShowingOverview = false
+        searchText = ""
+        statusFilter = .all
+        selectedTags = []
+        selectedID = nil
     }
 
     func consumePendingHandoff() {
         if let id = CountdownHandoffStore.consumeOpenCountdownID() {
+            isShowingOverview = false
             selectedID = id
         }
     }
@@ -70,15 +130,21 @@ final class CountdownStore {
         title: String,
         targetDate: Date,
         colorName: String,
-        symbolName: String
+        symbolName: String,
+        tags: [String]
     ) async {
         await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
+            isShowingOverview = false
+            searchText = ""
+            statusFilter = .all
+            selectedTags = []
             let snapshot = try await actor.createCountdown(
                 title: title,
                 targetDate: targetDate,
                 colorName: colorName,
-                symbolName: symbolName
+                symbolName: symbolName,
+                tags: tags
             )
             selectedID = snapshot.id
             await scheduleNotification(for: snapshot)
@@ -90,7 +156,8 @@ final class CountdownStore {
         title: String,
         targetDate: Date,
         colorName: String,
-        symbolName: String
+        symbolName: String,
+        tags: [String]
     ) async {
         await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
@@ -99,7 +166,8 @@ final class CountdownStore {
                 title: title,
                 targetDate: targetDate,
                 colorName: colorName,
-                symbolName: symbolName
+                symbolName: symbolName,
+                tags: tags
             )
             selectedID = updated.id
             await scheduleNotification(for: updated)
@@ -148,5 +216,28 @@ final class CountdownStore {
         }
 
         await notificationScheduler.schedule(snapshot: snapshot)
+    }
+
+    private func filteredSnapshots(from snapshots: [CountdownSnapshot]) -> [CountdownSnapshot] {
+        let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedTagKeys = Set(activeFilter.tags.map(CountdownTagNormalizer.key(for:)))
+
+        return snapshots
+            .filter { snapshot in
+                normalizedSearch.isEmpty
+                    || snapshot.title.localizedCaseInsensitiveContains(normalizedSearch)
+                    || snapshot.tags.contains { $0.localizedCaseInsensitiveContains(normalizedSearch) }
+            }
+            .filter { snapshot in
+                activeFilter.status.includes(snapshot.status)
+            }
+            .filter { snapshot in
+                guard !selectedTagKeys.isEmpty else {
+                    return true
+                }
+
+                let snapshotTagKeys = Set(snapshot.tags.map(CountdownTagNormalizer.key(for:)))
+                return selectedTagKeys.isSubset(of: snapshotTagKeys)
+            }
     }
 }

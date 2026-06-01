@@ -30,6 +30,78 @@ public enum CountdownSort: String, Codable, CaseIterable, Identifiable, Sendable
     }
 }
 
+public enum CountdownStatusFilter: String, Codable, CaseIterable, Identifiable, Sendable {
+    case all
+    case upcoming
+    case finished
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .all: "All"
+        case .upcoming: "Upcoming"
+        case .finished: "Finished"
+        }
+    }
+
+    public func includes(_ status: CountdownStatus) -> Bool {
+        switch self {
+        case .all:
+            true
+        case .upcoming:
+            status != .expired
+        case .finished:
+            status == .expired
+        }
+    }
+}
+
+public struct CountdownFilter: Codable, Equatable, Sendable {
+    public var status: CountdownStatusFilter
+    public var tags: [String]
+
+    public init(
+        status: CountdownStatusFilter = .all,
+        tags: [String] = []
+    ) {
+        self.status = status
+        self.tags = CountdownTagNormalizer.normalize(tags)
+    }
+}
+
+public enum CountdownTagNormalizer {
+    public static func normalize(_ tags: [String]) -> [String] {
+        var seenKeys: Set<String> = []
+        var values: [String] = []
+
+        for tag in tags {
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                continue
+            }
+
+            let key = key(for: trimmed)
+            guard !seenKeys.contains(key) else {
+                continue
+            }
+
+            seenKeys.insert(key)
+            values.append(trimmed)
+        }
+
+        return values.sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
+    }
+
+    public static func key(for tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+}
+
 public struct CountdownSnapshot: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var title: String
@@ -47,6 +119,7 @@ public struct CountdownSnapshot: Identifiable, Codable, Hashable, Sendable {
     public var originalDurationSeconds: TimeInterval
     public var progress: Double
     public var status: CountdownStatus
+    public var tags: [String]
 
     public init(
         id: UUID,
@@ -64,7 +137,8 @@ public struct CountdownSnapshot: Identifiable, Codable, Hashable, Sendable {
         remainingSeconds: TimeInterval,
         originalDurationSeconds: TimeInterval,
         progress: Double,
-        status: CountdownStatus
+        status: CountdownStatus,
+        tags: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -82,6 +156,7 @@ public struct CountdownSnapshot: Identifiable, Codable, Hashable, Sendable {
         self.originalDurationSeconds = originalDurationSeconds
         self.progress = progress
         self.status = status
+        self.tags = CountdownTagNormalizer.normalize(tags)
     }
 
     public var isQuickTimer: Bool {

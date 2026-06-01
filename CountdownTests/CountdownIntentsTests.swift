@@ -22,7 +22,8 @@ final class CountdownIntentsTests: XCTestCase {
             remainingSeconds: 600,
             originalDurationSeconds: 1_200,
             progress: 0.5,
-            status: .running
+            status: .running,
+            tags: ["Work"]
         )
 
         let entity = CountdownEntity(snapshot: snapshot)
@@ -30,6 +31,7 @@ final class CountdownIntentsTests: XCTestCase {
         XCTAssertEqual(entity.id, snapshot.id)
         XCTAssertEqual(entity.title, "Board Meeting")
         XCTAssertEqual(entity.status, .running)
+        XCTAssertEqual(snapshot.tags, ["Work"])
     }
 
     func testIntentInitializersProvideValidationExamples() {

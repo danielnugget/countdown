@@ -44,7 +44,10 @@ public final class CountdownItem {
         self.symbolName = symbolName
     }
 
-    public func snapshot(now: Date = Date()) -> CountdownSnapshot {
+    public func snapshot(
+        now: Date = Date(),
+        tags: [String] = []
+    ) -> CountdownSnapshot {
         let remaining = CountdownCalculator.remainingSeconds(
             targetDate: targetDate,
             pausedRemainingSeconds: pausedRemainingSeconds,
@@ -81,7 +84,8 @@ public final class CountdownItem {
                 remainingSeconds: remaining,
                 originalDurationSeconds: duration
             ),
-            status: status
+            status: status,
+            tags: tags
         )
     }
 }

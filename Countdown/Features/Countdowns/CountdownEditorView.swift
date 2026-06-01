@@ -26,6 +26,7 @@ struct CountdownEditorRequest {
     var targetDate: Date
     var colorName: String
     var symbolName: String
+    var tags: [String]
 }
 
 private struct CountdownEditorSymbol: Identifiable {
@@ -53,6 +54,8 @@ struct CountdownEditorView: View {
     @State private var targetDate: Date
     @State private var colorName: String
     @State private var symbolName: String
+    @State private var tags: [String]
+    @State private var tagDraft = ""
     @State private var symbolSearchText = ""
 
     private let colors = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "cyan", "brown", "gray"]
@@ -136,11 +139,13 @@ struct CountdownEditorView: View {
             _targetDate = State(initialValue: Date().addingTimeInterval(60 * 60))
             _colorName = State(initialValue: "blue")
             _symbolName = State(initialValue: "calendar")
+            _tags = State(initialValue: [])
         case .edit(let snapshot):
             _title = State(initialValue: snapshot.title)
             _targetDate = State(initialValue: max(snapshot.targetDate, Date().addingTimeInterval(60)))
             _colorName = State(initialValue: snapshot.colorName)
             _symbolName = State(initialValue: snapshot.symbolName == "timer" ? "calendar" : snapshot.symbolName)
+            _tags = State(initialValue: snapshot.tags)
         }
     }
 
@@ -151,6 +156,8 @@ struct CountdownEditorView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 18) {
+                preview
+
                 field("Title") {
                     TextField("Countdown title", text: $title)
                         .textFieldStyle(.roundedBorder)
@@ -172,6 +179,44 @@ struct CountdownEditorView: View {
                     LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 12) {
                         ForEach(colors, id: \.self) { color in
                             colorButton(color)
+                        }
+                    }
+                }
+
+                field("Tags") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if tags.isEmpty {
+                            Text("No tags")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 6) {
+                                    ForEach(tags, id: \.self) { tag in
+                                        tagButton(tag)
+                                    }
+                                }
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            TextField("Add tag", text: $tagDraft)
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit(addTagDraft)
+                                .onChange(of: tagDraft) {
+                                    if tagDraft.contains(",") {
+                                        addTagDraft()
+                                    }
+                                }
+                                .accessibilityLabel("Add tag")
+
+                            Button(action: addTagDraft) {
+                                Label("Add Tag", systemImage: "plus")
+                            }
+                            .labelStyle(.iconOnly)
+                            .disabled(tagDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .help("Add Tag")
+                            .accessibilityLabel("Add tag")
                         }
                     }
                 }
@@ -216,7 +261,8 @@ struct CountdownEditorView: View {
                         title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         targetDate: targetDate,
                         colorName: colorName,
-                        symbolName: symbolName
+                        symbolName: symbolName,
+                        tags: CountdownTagNormalizer.normalize(tags)
                     ))
                 }
                 .keyboardShortcut(.defaultAction)
@@ -227,6 +273,44 @@ struct CountdownEditorView: View {
             .padding(.vertical, 16)
         }
         .frame(width: 520)
+    }
+
+    private var preview: some View {
+        HStack(spacing: 14) {
+            CountdownRingView(
+                progress: previewProgress,
+                lineWidth: 8,
+                accentColor: colorName.countdownColor
+            )
+            .frame(width: 72, height: 72)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: symbolName)
+                        .foregroundStyle(colorName.countdownColor)
+                    Text(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Countdown" : title)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
+
+                Text(CountdownFormatter.string(
+                    remainingSeconds: max(0, targetDate.timeIntervalSinceNow),
+                    precision: .compact
+                ))
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+
+                if !tags.isEmpty {
+                    FlowTagRow(tags: tags, limit: 4)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Countdown preview")
     }
 
     private var header: some View {
@@ -262,6 +346,14 @@ struct CountdownEditorView: View {
     private var filteredSymbols: [CountdownEditorSymbol] {
         let query = symbolSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return symbols.filter { $0.matches(query) }
+    }
+
+    private var previewProgress: Double {
+        let duration = max(targetDate.timeIntervalSince(Date()), 1)
+        return CountdownCalculator.progress(
+            remainingSeconds: duration,
+            originalDurationSeconds: duration
+        )
     }
 
     private func field<Content: View>(
@@ -321,5 +413,34 @@ struct CountdownEditorView: View {
         .help(symbol.title)
         .accessibilityLabel(symbol.title)
         .accessibilityAddTraits(symbolName == symbol.id ? .isSelected : [])
+    }
+
+    private func tagButton(_ tag: String) -> some View {
+        Button {
+            tags.removeAll { CountdownTagNormalizer.key(for: $0) == CountdownTagNormalizer.key(for: tag) }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "tag")
+                Text(tag)
+                    .lineLimit(1)
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.bold))
+            }
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.quaternary, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Remove \(tag)")
+        .accessibilityLabel("Remove \(tag)")
+    }
+
+    private func addTagDraft() {
+        let parts = tagDraft
+            .split(separator: ",")
+            .map(String.init)
+        tags = CountdownTagNormalizer.normalize(tags + parts)
+        tagDraft = ""
     }
 }
