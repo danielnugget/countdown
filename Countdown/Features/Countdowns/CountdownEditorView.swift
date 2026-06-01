@@ -499,11 +499,6 @@ struct CountdownEditorView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-
-                    Text(symbol.id)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
 
                 if symbolName == symbol.id {

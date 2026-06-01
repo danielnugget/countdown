@@ -83,14 +83,6 @@ private struct CountdownDashboardView: View {
             .frame(maxWidth: 980, alignment: .leading)
         }
         .navigationTitle("Overview")
-        .toolbar {
-            ToolbarItemGroup {
-                Button(action: onCreate) {
-                    Label("New Countdown", systemImage: "plus")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-            }
-        }
     }
 
     private var dashboardHeader: some View {
