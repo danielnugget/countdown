@@ -13,7 +13,6 @@ public struct CountdownWidgetEntry: TimelineEntry, Sendable {
     public let date: Date
     public let configuration: CountdownWidgetConfigurationIntent
     public let selectedSnapshot: CountdownSnapshot?
-    public let snapshots: [CountdownSnapshot]
     public let state: CountdownWidgetState
     public let displayPrecision: CountdownDisplayPrecision
 
@@ -21,14 +20,12 @@ public struct CountdownWidgetEntry: TimelineEntry, Sendable {
         date: Date,
         configuration: CountdownWidgetConfigurationIntent,
         selectedSnapshot: CountdownSnapshot?,
-        snapshots: [CountdownSnapshot],
         state: CountdownWidgetState,
         displayPrecision: CountdownDisplayPrecision
     ) {
         self.date = date
         self.configuration = configuration
         self.selectedSnapshot = selectedSnapshot
-        self.snapshots = snapshots
         self.state = state
         self.displayPrecision = displayPrecision
     }
@@ -40,7 +37,6 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
             date: Date(),
             configuration: CountdownWidgetConfigurationIntent(),
             selectedSnapshot: .placeholder,
-            snapshots: [.placeholder],
             state: .ready,
             displayPrecision: .automatic
         )
@@ -60,7 +56,7 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
         let now = Date()
         let entry = await entry(for: configuration, date: now)
         let entries = timelineEntries(from: entry, now: now)
-        let reloadDate = nextRefreshDate(for: entry, entries: entries, now: now)
+        let reloadDate = nextRefreshDate(entries: entries, now: now)
         return Timeline(entries: entries, policy: .after(reloadDate))
     }
 
@@ -80,7 +76,6 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
                     date: date,
                     configuration: configuration,
                     selectedSnapshot: nil,
-                    snapshots: [],
                     state: .empty,
                     displayPrecision: displayPrecision
                 )
@@ -91,7 +86,6 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
                 date: date,
                 configuration: configuration,
                 selectedSnapshot: selected,
-                snapshots: snapshots,
                 state: .ready,
                 displayPrecision: displayPrecision
             )
@@ -100,7 +94,6 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
                 date: date,
                 configuration: configuration,
                 selectedSnapshot: nil,
-                snapshots: [],
                 state: .unavailable,
                 displayPrecision: displayPrecision
             )
@@ -119,78 +112,31 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
         return snapshots.first(where: { $0.status == .running }) ?? snapshots.first
     }
 
-    private func nextRefreshDate(for entry: CountdownWidgetEntry, now: Date) -> Date {
-        guard let selected = entry.selectedSnapshot, selected.status == .running else {
-            return now.addingTimeInterval(15 * 60)
-        }
-
-        let secondsUntilTarget = selected.targetDate.timeIntervalSince(now)
-        if secondsUntilTarget <= 0 {
-            return now.addingTimeInterval(15 * 60)
-        }
-
-        if displaysSeconds(
-            remainingSeconds: selected.remainingSeconds,
-            precision: entry.displayPrecision
-        ) {
-            return now.addingTimeInterval(min(secondsUntilTarget, 60))
-        }
-
-        return now.addingTimeInterval(max(5 * 60, min(secondsUntilTarget, 60 * 60)))
-    }
-
     private func nextRefreshDate(
-        for entry: CountdownWidgetEntry,
         entries: [CountdownWidgetEntry],
         now: Date
     ) -> Date {
-        guard entries.count > 1, let lastEntryDate = entries.last?.date else {
-            return nextRefreshDate(for: entry, now: now)
+        guard entries.count > 1, let lastDate = entries.last?.date else {
+            return now.addingTimeInterval(15 * 60)
         }
-
-        return lastEntryDate.addingTimeInterval(1)
+        return lastDate.addingTimeInterval(1)
     }
 
     private func timelineEntries(
         from entry: CountdownWidgetEntry,
         now: Date
     ) -> [CountdownWidgetEntry] {
-        guard let selected = entry.selectedSnapshot,
-              selected.status == .running,
-              displaysSeconds(
-                remainingSeconds: selected.remainingSeconds,
-                precision: entry.displayPrecision
-              ) else {
-            return [entry]
-        }
-
-        let entryCount = max(1, min(5 * 60, Int(ceil(selected.remainingSeconds)) + 1))
-        return (0..<entryCount).map { offset in
-            let date = now.addingTimeInterval(TimeInterval(offset))
-            return CountdownWidgetEntry(
+        guard let selected = entry.selectedSnapshot else { return [entry] }
+        return CountdownRefreshPolicy.timelineDates(
+            for: selected, precision: entry.displayPrecision, now: now
+        ).map { date in
+            CountdownWidgetEntry(
                 date: date,
                 configuration: entry.configuration,
                 selectedSnapshot: selected.recalculated(now: date),
-                snapshots: entry.snapshots,
                 state: entry.state,
                 displayPrecision: entry.displayPrecision
             )
-        }
-    }
-
-    private func displaysSeconds(
-        remainingSeconds: TimeInterval,
-        precision: CountdownDisplayPrecision
-    ) -> Bool {
-        let parts = CountdownFormatter.parts(from: remainingSeconds)
-
-        switch precision {
-        case .full:
-            return true
-        case .automatic:
-            return parts.days == 0
-        case .compact:
-            return parts.days == 0 && parts.hours == 0
         }
     }
 }
@@ -200,7 +146,7 @@ private extension CountdownSnapshot {
         let now = Date()
         let target = now.addingTimeInterval(42 * 60)
         return CountdownSnapshot(
-            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID(),
             title: "Design Review",
             createdAt: now,
             updatedAt: now,

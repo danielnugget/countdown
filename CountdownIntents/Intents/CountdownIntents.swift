@@ -83,6 +83,9 @@ enum CountdownIntentRunner {
             targetDate: targetDate,
             now: now
         )
+        if CountdownSettingsStore().load().notificationsEnabled {
+            await CountdownNotificationScheduler().schedule(snapshot: snapshot)
+        }
         reloadWidgets()
         return snapshot
     }
@@ -90,7 +93,9 @@ enum CountdownIntentRunner {
     static func delete(id: UUID) async throws {
         let container = try CountdownContainerFactory.makeSharedContainer()
         let actor = CountdownDataActor(modelContainer: container)
+        let snapshot = try await actor.snapshot(id: id)
         try await actor.deleteCountdown(id: id)
+        await CountdownNotificationScheduler().cancel(identifier: snapshot.notificationIdentifier)
         reloadWidgets()
     }
 

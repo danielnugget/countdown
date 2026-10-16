@@ -33,17 +33,18 @@ struct CountdownEditorRequest {
 private struct CountdownEditorSymbol: Identifiable {
     let id: String
     let title: String
-    let keywords: [String]
+    private let searchableText: String
 
-    func matches(_ query: String) -> Bool {
-        let tokens = query.searchTokens
+    init(id: String, title: String, keywords: [String]) {
+        self.id = id
+        self.title = title
+        searchableText = ([title, id] + keywords).joined(separator: " ").normalizedForSymbolSearch
+    }
+
+    func matches(_ tokens: [String]) -> Bool {
         guard !tokens.isEmpty else {
             return true
         }
-
-        let searchableText = ([title, id] + keywords)
-            .joined(separator: " ")
-            .normalizedForSymbolSearch
 
         return tokens.allSatisfy { searchableText.contains($0) }
     }
@@ -66,6 +67,7 @@ private extension String {
 
 struct CountdownEditorView: View {
     let mode: CountdownEditorMode
+    var isSaving = false
     let onSave: (CountdownEditorRequest) -> Void
     let onCancel: () -> Void
     private let collectionSuggestions: [String]
@@ -80,8 +82,8 @@ struct CountdownEditorView: View {
     @State private var tagDraft = ""
     @State private var symbolSearchText = ""
 
-    private let colors = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "cyan", "brown", "gray"]
-    private let symbols = [
+    private static let colors = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "cyan", "brown", "gray"]
+    private static let symbols = [
         CountdownEditorSymbol(id: "calendar", title: "Calendar", keywords: ["date", "event", "schedule"]),
         CountdownEditorSymbol(id: "calendar.badge.clock", title: "Deadline", keywords: ["date", "time", "schedule"]),
         CountdownEditorSymbol(id: "clock", title: "Clock", keywords: ["time"]),
@@ -206,6 +208,7 @@ struct CountdownEditorView: View {
 
     init(
         mode: CountdownEditorMode,
+        isSaving: Bool = false,
         suggestedCollectionName: String? = nil,
         collectionSuggestions: [String] = [],
         tagSuggestions: [String] = [],
@@ -213,6 +216,7 @@ struct CountdownEditorView: View {
         onCancel: @escaping () -> Void
     ) {
         self.mode = mode
+        self.isSaving = isSaving
         self.onSave = onSave
         self.onCancel = onCancel
         self.collectionSuggestions = CountdownCollectionNormalizer.normalize(collectionSuggestions)
@@ -230,7 +234,7 @@ struct CountdownEditorView: View {
             _title = State(initialValue: snapshot.title)
             _targetDate = State(initialValue: max(snapshot.targetDate, Date().addingTimeInterval(60)))
             _colorName = State(initialValue: snapshot.colorName)
-            _symbolName = State(initialValue: snapshot.symbolName == "timer" ? "calendar" : snapshot.symbolName)
+            _symbolName = State(initialValue: snapshot.symbolName)
             _tags = State(initialValue: snapshot.tags)
             _collectionName = State(initialValue: snapshot.collectionName ?? "")
         }
@@ -249,6 +253,7 @@ struct CountdownEditorView: View {
                     TextField("Countdown title", text: $title)
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.small)
+                        .accessibilityLabel("Countdown title")
                 }
 
                 HStack(alignment: .top, spacing: 12) {
@@ -260,6 +265,7 @@ struct CountdownEditorView: View {
                             displayedComponents: [.date, .hourAndMinute]
                         )
                         .labelsHidden()
+                        .accessibilityLabel("Target date and time")
                         .controlSize(.small)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -282,7 +288,7 @@ struct CountdownEditorView: View {
 
                 field("Color") {
                     LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 10) {
-                        ForEach(colors, id: \.self) { color in
+                        ForEach(Self.colors, id: \.self) { color in
                             colorButton(color)
                         }
                     }
@@ -371,25 +377,29 @@ struct CountdownEditorView: View {
                 Spacer()
                 Button("Cancel", action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
+                    .accessibilityLabel("Cancel")
+                    .disabled(isSaving)
+                Button(isSaving ? "Saving…" : "Save") {
                     onSave(CountdownEditorRequest(
                         mode: mode,
                         title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         targetDate: targetDate,
                         colorName: colorName,
                         symbolName: symbolName,
-                        tags: CountdownTagNormalizer.normalize(tags),
+                        tags: CountdownTagNormalizer.normalize(tags + tagDraft.split(separator: ",").map(String.init)),
                         collectionName: CountdownCollectionNormalizer.normalize(collectionName)
                     ))
                 }
                 .keyboardShortcut(.defaultAction)
+                .accessibilityLabel("Save countdown")
                 .buttonStyle(.borderedProminent)
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
         }
         .frame(width: 520)
+        .interactiveDismissDisabled(isSaving)
     }
 
     private var preview: some View {
@@ -453,8 +463,8 @@ struct CountdownEditorView: View {
     }
 
     private var filteredSymbols: [CountdownEditorSymbol] {
-        let query = symbolSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return symbols.filter { $0.matches(query) }
+        let tokens = symbolSearchText.searchTokens
+        return Self.symbols.filter { $0.matches(tokens) }
     }
 
     private var matchingCollectionSuggestions: [String] {

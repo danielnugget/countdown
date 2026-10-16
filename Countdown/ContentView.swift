@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(CountdownStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
     @State private var editorMode: CountdownEditorMode?
     @State private var systemEventObserver: CountdownSystemEventObserver?
 
@@ -18,15 +19,12 @@ struct ContentView: View {
                 selectedCollectionName: store.selectedCollectionName,
                 onShowDashboard: {
                     store.showDashboard()
-                    Task { await store.refresh() }
                 },
                 onShowCountdowns: {
                     store.clearFilters()
-                    Task { await store.refresh() }
                 },
                 onSelectCollection: { collectionName in
                     store.setCollectionFilter(collectionName)
-                    Task { await store.refresh() }
                 }
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
@@ -67,15 +65,12 @@ struct ContentView: View {
                         onCreate: { editorMode = .createDate },
                         onSelectStatus: { filter in
                             store.setStatusFilter(filter)
-                            Task { await store.refresh() }
                         },
                         onSelectTag: { tag in
                             store.setTagFilter(tag)
-                            Task { await store.refresh() }
                         },
                         onClearFilters: {
                             store.clearFilters()
-                            Task { await store.refresh() }
                         }
                     )
                     .frame(minWidth: 300, idealWidth: 360, maxWidth: 460, maxHeight: .infinity)
@@ -110,20 +105,34 @@ struct ContentView: View {
                     Label("New Countdown", systemImage: "plus")
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                .accessibilityLabel("New Countdown")
             }
         }
         .task {
+            systemEventObserver = CountdownSystemEventObserver(onEvent: {
+                Task { await store.handleSystemTimeChange() }
+            }, onDataChange: {
+                Task { await store.refresh() }
+            })
             await store.refresh()
             store.consumePendingHandoff()
-            systemEventObserver = CountdownSystemEventObserver {
-                Task { await store.handleSystemTimeChange() }
+            await store.reconcileNotifications()
+        }
+        .task(id: scenePhase == .active ? store.nextExpirationDate : nil) {
+            guard scenePhase == .active, let deadline = store.nextExpirationDate else { return }
+            do {
+                try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+                guard !Task.isCancelled else { return }
+                store.advanceClock()
+            } catch { /* The view or next deadline changed. */ }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task {
+                    await store.refresh()
+                    store.consumePendingHandoff()
+                }
             }
-        }
-        .onChange(of: store.searchText) {
-            Task { await store.refresh() }
-        }
-        .onChange(of: store.sort) {
-            Task { await store.refresh() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .countdownShowNewEditor)) { _ in
             editorMode = .createDate
@@ -131,13 +140,13 @@ struct ContentView: View {
         .sheet(item: $editorMode) { mode in
             CountdownEditorView(
                 mode: mode,
+                isSaving: store.isSaving,
                 suggestedCollectionName: store.selectedCollectionName,
                 collectionSuggestions: store.availableCollections,
                 tagSuggestions: store.availableTags
             ) { request in
                 Task {
-                    await save(request)
-                    editorMode = nil
+                    if await save(request) { editorMode = nil }
                 }
             } onCancel: {
                 editorMode = nil
@@ -156,10 +165,10 @@ struct ContentView: View {
         }
     }
 
-    private func save(_ request: CountdownEditorRequest) async {
+    private func save(_ request: CountdownEditorRequest) async -> Bool {
         switch request.mode {
         case .createDate:
-            await store.createCountdown(
+            return await store.createCountdown(
                 title: request.title,
                 targetDate: request.targetDate,
                 colorName: request.colorName,
@@ -168,7 +177,7 @@ struct ContentView: View {
                 collectionName: request.collectionName
             )
         case .edit(let snapshot):
-            await store.updateCountdown(
+            return await store.updateCountdown(
                 snapshot,
                 title: request.title,
                 targetDate: request.targetDate,

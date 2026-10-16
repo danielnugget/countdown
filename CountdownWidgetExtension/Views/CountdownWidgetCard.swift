@@ -114,14 +114,13 @@ public struct CountdownWidgetCard: View {
 
     @ViewBuilder
     private var finishedStatusLine: some View {
-        let resolvedSnapshot = snapshot.recalculated(now: Date())
-        if resolvedSnapshot.status == .expired {
+        if snapshot.status == .expired {
             Text("Finished")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel(CountdownFormatter.accessibilityString(
-                    remainingSeconds: resolvedSnapshot.remainingSeconds,
-                    status: resolvedSnapshot.status
+                    remainingSeconds: snapshot.remainingSeconds,
+                    status: snapshot.status
                 ))
         }
     }

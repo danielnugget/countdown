@@ -1,15 +1,21 @@
-import CountdownShared
 import Foundation
 import UserNotifications
 
-final class CountdownNotificationScheduler {
+@MainActor
+public protocol CountdownNotificationScheduling {
+    func schedule(snapshot: CountdownSnapshot) async
+    func cancel(identifier: String?) async
+}
+
+@MainActor
+public final class CountdownNotificationScheduler: CountdownNotificationScheduling {
     private let center: UNUserNotificationCenter
 
-    init(center: UNUserNotificationCenter = .current()) {
+    public init(center: UNUserNotificationCenter = .current()) {
         self.center = center
     }
 
-    func schedule(snapshot: CountdownSnapshot) async {
+    public func schedule(snapshot: CountdownSnapshot) async {
         guard snapshot.status == .running,
               snapshot.targetDate > Date(),
               let notificationDate = CountdownCalculator.notificationDate(
@@ -21,7 +27,7 @@ final class CountdownNotificationScheduler {
             return
         }
 
-        guard await requestAuthorizationIfNeeded() else {
+        guard await requestAuthorizationIfNeeded(), !Task.isCancelled else {
             return
         }
 
@@ -47,7 +53,7 @@ final class CountdownNotificationScheduler {
         }
     }
 
-    func cancel(identifier: String?) async {
+    public func cancel(identifier: String?) async {
         guard let identifier else {
             return
         }

@@ -56,6 +56,10 @@ SwiftData CountdownItem
 
 Settings are stored through `CountdownSettingsStore` in the shared app group. Widget timelines are reloaded after store mutations so the widget extension stays aligned with app data.
 
+Search, filters, and sorting use cached snapshots without fetching SwiftData on every keystroke. Status counts and filters update at countdown deadlines, and live displays stop ticking for finished countdowns and inactive windows. Widget timelines follow the selected display precision.
+
+`CountdownShared/Notifications/CountdownNotificationScheduler.swift` handles notifications for both the app and App Intents. Changing the notification preference reconciles existing countdowns, including those hidden by filters.
+
 ## Build and Run
 
 Build and launch the app:
@@ -70,7 +74,7 @@ Build and verify that the app launches:
 ./script/build_and_run.sh --verify
 ```
 
-The helper script builds the `Countdown` scheme with code signing disabled by default:
+The helper script builds the `Countdown` scheme with code signing enabled by default. To disable signing explicitly:
 
 ```bash
 CODE_SIGNING_ALLOWED=NO ./script/build_and_run.sh
@@ -91,6 +95,8 @@ xcodebuild \
 ```
 
 Unit tests cover shared logic such as formatting, calculations, persistence, filtering, and App Intents behavior. Widget tests live in `CountdownWidgetTests`.
+
+See [AUDIT.md](AUDIT.md) for the latest functional checks, regression coverage, and verification limits.
 
 ## Development Notes
 

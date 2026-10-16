@@ -34,8 +34,10 @@ public final class CountdownCollectionStore: @unchecked Sendable {
 
     public func save(_ collectionName: String?, for id: UUID) {
         var storedCollections = loadAll()
+        let normalizedName = CountdownCollectionNormalizer.normalize(collectionName)
+        guard storedCollections[id] != normalizedName else { return }
 
-        if let collectionName = CountdownCollectionNormalizer.normalize(collectionName) {
+        if let collectionName = normalizedName {
             storedCollections[id] = collectionName
         } else {
             storedCollections[id] = nil
@@ -46,7 +48,7 @@ public final class CountdownCollectionStore: @unchecked Sendable {
 
     public func removeCollection(for id: UUID) {
         var storedCollections = loadAll()
-        storedCollections[id] = nil
+        guard storedCollections.removeValue(forKey: id) != nil else { return }
         saveAll(storedCollections)
     }
 

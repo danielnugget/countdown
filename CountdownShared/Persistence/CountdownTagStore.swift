@@ -34,6 +34,8 @@ public final class CountdownTagStore: @unchecked Sendable {
     public func save(_ tags: [String], for id: UUID) {
         var storedTags = loadAll()
         let normalizedTags = CountdownTagNormalizer.normalize(tags)
+        let desiredTags = normalizedTags.isEmpty ? nil : normalizedTags
+        guard storedTags[id] != desiredTags else { return }
 
         if normalizedTags.isEmpty {
             storedTags[id] = nil
@@ -46,7 +48,7 @@ public final class CountdownTagStore: @unchecked Sendable {
 
     public func removeTags(for id: UUID) {
         var storedTags = loadAll()
-        storedTags[id] = nil
+        guard storedTags.removeValue(forKey: id) != nil else { return }
         saveAll(storedTags)
     }
 

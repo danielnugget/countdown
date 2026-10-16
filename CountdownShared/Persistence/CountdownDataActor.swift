@@ -11,7 +11,6 @@ public actor CountdownDataActor {
     ) throws -> [CountdownSnapshot] {
         let descriptor = FetchDescriptor<CountdownItem>()
         let items = try modelContext.fetch(descriptor)
-        let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let tagsByID = CountdownTagStore().loadAll()
         let collectionsByID = CountdownCollectionStore().loadAll()
 
@@ -22,39 +21,9 @@ public actor CountdownDataActor {
                 collectionName: collectionsByID[item.id]
             )
         }
-        let selectedTagKeys = Set(filter.tags.map(CountdownTagNormalizer.key(for:)))
-        let selectedCollectionKey = filter.collectionName.map(CountdownCollectionNormalizer.key(for:))
-
-        return snapshots
-            .filter { snapshot in
-                normalizedSearch.isEmpty
-                    || snapshot.title.localizedCaseInsensitiveContains(normalizedSearch)
-                    || snapshot.tags.contains { $0.localizedCaseInsensitiveContains(normalizedSearch) }
-                    || snapshot.collectionName?.localizedCaseInsensitiveContains(normalizedSearch) == true
-            }
-            .filter { snapshot in
-                filter.status.includes(snapshot.status)
-            }
-            .filter { snapshot in
-                guard let selectedCollectionKey else {
-                    return true
-                }
-
-                guard let collectionName = snapshot.collectionName else {
-                    return false
-                }
-
-                return CountdownCollectionNormalizer.key(for: collectionName) == selectedCollectionKey
-            }
-            .filter { snapshot in
-                guard !selectedTagKeys.isEmpty else {
-                    return true
-                }
-
-                let snapshotTagKeys = Set(snapshot.tags.map(CountdownTagNormalizer.key(for:)))
-                return selectedTagKeys.isSubset(of: snapshotTagKeys)
-            }
-            .sorted(by: sort.comparator)
+        return CountdownSnapshotQuery.apply(
+            to: snapshots, searchText: searchText, sort: sort, filter: filter
+        )
     }
 
     public func snapshot(id: UUID, now: Date = Date()) throws -> CountdownSnapshot {
@@ -189,33 +158,5 @@ public actor CountdownDataActor {
         }
 
         return item
-    }
-}
-
-private extension CountdownSort {
-    var comparator: @Sendable (CountdownSnapshot, CountdownSnapshot) -> Bool {
-        switch self {
-        case .targetDate:
-            { lhs, rhs in
-                if lhs.status == rhs.status {
-                    return lhs.targetDate < rhs.targetDate
-                }
-                return lhs.status.sortRank < rhs.status.sortRank
-            }
-        case .title:
-            { lhs, rhs in lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending }
-        case .createdDate:
-            { lhs, rhs in lhs.createdAt < rhs.createdAt }
-        }
-    }
-}
-
-private extension CountdownStatus {
-    var sortRank: Int {
-        switch self {
-        case .running: 0
-        case .paused: 1
-        case .expired: 2
-        }
     }
 }

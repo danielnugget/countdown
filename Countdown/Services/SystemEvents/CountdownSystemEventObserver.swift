@@ -1,14 +1,34 @@
 import AppKit
+import CoreData
 import Foundation
 
 @MainActor
 final class CountdownSystemEventObserver {
     private var observers: [NSObjectProtocol] = []
+    private let notificationCenter: NotificationCenter
 
-    init(onEvent: @escaping () -> Void) {
-        let notificationCenter = NotificationCenter.default
+    init(
+        notificationCenter: NotificationCenter = .default,
+        onEvent: @escaping () -> Void,
+        onDataChange: @escaping () -> Void = {}
+    ) {
+        self.notificationCenter = notificationCenter
+        observers.append(notificationCenter.addObserver(
+            forName: .NSPersistentStoreRemoteChange,
+            object: nil,
+            queue: .main
+        ) { _ in
+            onDataChange()
+        })
         observers.append(notificationCenter.addObserver(
             forName: .NSSystemClockDidChange,
+            object: nil,
+            queue: .main
+        ) { _ in
+            onEvent()
+        })
+        observers.append(notificationCenter.addObserver(
+            forName: .NSCalendarDayChanged,
             object: nil,
             queue: .main
         ) { _ in
@@ -32,7 +52,7 @@ final class CountdownSystemEventObserver {
 
     deinit {
         for observer in observers {
-            NotificationCenter.default.removeObserver(observer)
+            notificationCenter.removeObserver(observer)
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
     }

@@ -168,9 +168,8 @@ private struct CountdownDashboardView: View {
 
     private var nextUp: CountdownSnapshot? {
         filteredSnapshots
-            .filter { $0.status != .expired }
-            .sorted { $0.targetDate < $1.targetDate }
-            .first
+            .filter { $0.status == .running }
+            .min { $0.targetDate < $1.targetDate }
     }
 
     private var metricColumns: [GridItem] {
@@ -206,12 +205,15 @@ private struct TimelineGroup: Identifiable {
 }
 
 private struct NextUpCard: View {
+    @Environment(\.scenePhase) private var scenePhase
     let snapshot: CountdownSnapshot
     let precision: CountdownDisplayPrecision
     let onSelect: (UUID) -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
+        TimelineView(CountdownTimelineSchedule(
+            deadline: snapshot.status == .running && scenePhase == .active ? snapshot.targetDate : nil
+        )) { context in
             let liveSnapshot = snapshot.recalculated(now: context.date)
 
             DashboardCard {
@@ -283,11 +285,14 @@ private struct MetricCard: View {
 }
 
 private struct TimelineRow: View {
+    @Environment(\.scenePhase) private var scenePhase
     let snapshot: CountdownSnapshot
     let precision: CountdownDisplayPrecision
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
+        TimelineView(CountdownTimelineSchedule(
+            deadline: snapshot.status == .running && scenePhase == .active ? snapshot.targetDate : nil
+        )) { context in
             let liveSnapshot = snapshot.recalculated(now: context.date)
 
             HStack(spacing: 10) {
@@ -317,13 +322,16 @@ private struct TimelineRow: View {
 }
 
 private struct CountdownDetailView: View {
+    @Environment(\.scenePhase) private var scenePhase
     let snapshot: CountdownSnapshot
     let precision: CountdownDisplayPrecision
     let onEdit: (CountdownSnapshot) -> Void
     let onDelete: (CountdownSnapshot) -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
+        TimelineView(CountdownTimelineSchedule(
+            deadline: snapshot.status == .running && scenePhase == .active ? snapshot.targetDate : nil
+        )) { context in
             let liveSnapshot = snapshot.recalculated(now: context.date)
 
             ScrollView {
@@ -358,6 +366,7 @@ private struct CountdownDetailView: View {
                     } label: {
                         Label("Edit", systemImage: "square.and.pencil")
                     }
+                    .accessibilityLabel("Edit countdown")
 
                     Button(role: .destructive) {
                         onDelete(liveSnapshot)
@@ -365,6 +374,7 @@ private struct CountdownDetailView: View {
                         Label("Delete", systemImage: "trash")
                     }
                     .keyboardShortcut(.delete, modifiers: .command)
+                    .accessibilityLabel("Delete countdown")
                 }
             }
         }

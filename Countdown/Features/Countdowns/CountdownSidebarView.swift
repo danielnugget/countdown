@@ -256,10 +256,13 @@ struct CountdownListView: View {
 }
 
 private struct CountdownListRow: View {
+    @Environment(\.scenePhase) private var scenePhase
     let snapshot: CountdownSnapshot
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
+        TimelineView(CountdownTimelineSchedule(
+            deadline: snapshot.status == .running && scenePhase == .active ? snapshot.targetDate : nil
+        )) { context in
             let liveSnapshot = snapshot.recalculated(now: context.date)
 
             VStack(alignment: .leading, spacing: 8) {

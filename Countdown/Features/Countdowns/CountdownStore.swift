@@ -7,27 +7,51 @@ import WidgetKit
 @MainActor
 @Observable
 final class CountdownStore {
-    var allSnapshots: [CountdownSnapshot] = []
-    var snapshots: [CountdownSnapshot] = []
+    private(set) var allSnapshots: [CountdownSnapshot] = []
+    private(set) var snapshots: [CountdownSnapshot] = []
     var selectedID: UUID?
     var isShowingOverview = true
-    var searchText = ""
-    var statusFilter: CountdownStatusFilter = .all
-    var selectedTags: [String] = []
-    var selectedCollectionName: String?
-    var sort: CountdownSort = .targetDate
+    var searchText: String = "" {
+        didSet { if searchText != oldValue { applyFilters() } }
+    }
+    var statusFilter: CountdownStatusFilter = .all {
+        didSet { if statusFilter != oldValue { applyFilters() } }
+    }
+    var selectedTags: [String] = [] {
+        didSet { if selectedTags != oldValue { applyFilters() } }
+    }
+    var selectedCollectionName: String? = nil {
+        didSet { if selectedCollectionName != oldValue { applyFilters() } }
+    }
+    var sort: CountdownSort = .targetDate {
+        didSet {
+            if sort != oldValue {
+                updateSortedSnapshots()
+                applyFilters()
+            }
+        }
+    }
     var isLoading = false
+    private(set) var isSaving = false
     var errorMessage: String?
     var settings: CountdownAppSettings
 
     private let modelContainer: ModelContainer
     private let settingsStore: CountdownSettingsStore
-    private let notificationScheduler: CountdownNotificationScheduler
+    private let notificationScheduler: any CountdownNotificationScheduling
+    @ObservationIgnored private var refreshRevision = 0
+    @ObservationIgnored private var sortedSnapshots: [CountdownSnapshot] = []
+    private(set) var availableTags: [String] = []
+    private(set) var availableCollections: [String] = []
+    private(set) var upcomingCount = 0
+    private(set) var finishedCount = 0
+    private var tagCounts: [String: Int] = [:]
+    private var collectionCounts: [String: Int] = [:]
 
     init(
         modelContainer: ModelContainer,
         settingsStore: CountdownSettingsStore = CountdownSettingsStore(),
-        notificationScheduler: CountdownNotificationScheduler,
+        notificationScheduler: any CountdownNotificationScheduling,
         initialSettings: CountdownAppSettings = CountdownAppSettings(),
         initialError: String? = nil
     ) {
@@ -47,62 +71,51 @@ final class CountdownStore {
         CountdownFilter(status: statusFilter, tags: selectedTags, collectionName: selectedCollectionName)
     }
 
-    var availableTags: [String] {
-        CountdownTagNormalizer.normalize(allSnapshots.flatMap(\.tags))
-    }
-
-    var availableCollections: [String] {
-        CountdownCollectionNormalizer.normalize(allSnapshots.compactMap(\.collectionName))
-    }
-
-    var upcomingCount: Int {
-        allSnapshots.filter { $0.status != .expired }.count
-    }
-
-    var finishedCount: Int {
-        allSnapshots.filter { $0.status == .expired }.count
+    var nextExpirationDate: Date? {
+        allSnapshots.lazy.filter { $0.status == .running }.map(\.targetDate).min()
     }
 
     func count(for tag: String) -> Int {
-        let key = CountdownTagNormalizer.key(for: tag)
-        return allSnapshots.filter { snapshot in
-            snapshot.tags.map(CountdownTagNormalizer.key(for:)).contains(key)
-        }.count
+        tagCounts[CountdownTagNormalizer.key(for: tag), default: 0]
     }
 
     func count(forCollection collectionName: String) -> Int {
-        let key = CountdownCollectionNormalizer.key(for: collectionName)
-        return allSnapshots.filter { snapshot in
-            guard let collectionName = snapshot.collectionName else {
-                return false
-            }
-
-            return CountdownCollectionNormalizer.key(for: collectionName) == key
-        }.count
+        collectionCounts[CountdownCollectionNormalizer.key(for: collectionName), default: 0]
     }
 
+    // MARK: - Loading and local queries
+
     func refresh() async {
+        refreshRevision += 1
+        let revision = refreshRevision
         isLoading = true
-        defer { isLoading = false }
+        defer { if revision == refreshRevision { isLoading = false } }
 
         do {
             let actor = CountdownDataActor(modelContainer: modelContainer)
-            allSnapshots = try await actor.snapshots(sort: sort)
-            snapshots = filteredSnapshots(from: allSnapshots)
-            if let selectedID, snapshots.contains(where: { $0.id == selectedID }) {
-                self.selectedID = selectedID
-            } else {
-                selectedID = nil
-            }
-            errorMessage = nil
+            let loaded = try await actor.snapshots()
+            guard revision == refreshRevision else { return }
+            replaceSnapshots(loaded)
         } catch {
-            errorMessage = error.localizedDescription
+            if revision == refreshRevision { errorMessage = error.localizedDescription }
         }
+    }
+
+    /// Refresh status-dependent summaries at a deadline without reading or writing SwiftData.
+    func advanceClock(now: Date = Date()) {
+        replaceSnapshots(allSnapshots.map { $0.recalculated(now: now) })
     }
 
     func selectCountdown(_ id: UUID) {
         isShowingOverview = false
+        if !snapshots.contains(where: { $0.id == id }) {
+            clearFilters()
+        }
         selectedID = id
+        if !allSnapshots.contains(where: { $0.id == id }) {
+            // A URL or intent may refer to a countdown created by another process.
+            Task { await refresh() }
+        }
     }
 
     func showDashboard() {
@@ -148,11 +161,13 @@ final class CountdownStore {
 
     func consumePendingHandoff() {
         if let id = CountdownHandoffStore.consumeOpenCountdownID() {
-            isShowingOverview = false
-            selectedID = id
+            selectCountdown(id)
         }
     }
 
+    // MARK: - Mutations
+
+    @discardableResult
     func createCountdown(
         title: String,
         targetDate: Date,
@@ -160,14 +175,12 @@ final class CountdownStore {
         symbolName: String,
         tags: [String],
         collectionName: String?
-    ) async {
-        await mutate {
+    ) async -> Bool {
+        guard !isSaving else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        return await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
-            isShowingOverview = false
-            searchText = ""
-            statusFilter = .all
-            selectedTags = []
-            selectedCollectionName = CountdownCollectionNormalizer.normalize(collectionName)
             let snapshot = try await actor.createCountdown(
                 title: title,
                 targetDate: targetDate,
@@ -176,11 +189,17 @@ final class CountdownStore {
                 tags: tags,
                 collectionName: collectionName
             )
+            isShowingOverview = false
+            searchText = ""
+            statusFilter = .all
+            selectedTags = []
+            selectedCollectionName = CountdownCollectionNormalizer.normalize(collectionName)
             selectedID = snapshot.id
             await scheduleNotification(for: snapshot)
         }
     }
 
+    @discardableResult
     func updateCountdown(
         _ snapshot: CountdownSnapshot,
         title: String,
@@ -189,8 +208,11 @@ final class CountdownStore {
         symbolName: String,
         tags: [String],
         collectionName: String?
-    ) async {
-        await mutate {
+    ) async -> Bool {
+        guard !isSaving else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        return await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
             let updated = try await actor.updateCountdown(
                 id: snapshot.id,
@@ -201,6 +223,9 @@ final class CountdownStore {
                 tags: tags,
                 collectionName: collectionName
             )
+            if CountdownSnapshotQuery.apply(
+                to: [updated], searchText: searchText, sort: sort, filter: activeFilter
+            ).isEmpty { clearFilters() }
             selectedID = updated.id
             await scheduleNotification(for: updated)
         }
@@ -218,26 +243,38 @@ final class CountdownStore {
     func handleSystemTimeChange() async {
         await mutate {
             let actor = CountdownDataActor(modelContainer: modelContainer)
-            _ = try await actor.markExpiredCountdowns()
-            for snapshot in snapshots where snapshot.status == .running {
-                await scheduleNotification(for: snapshot)
-            }
+            let updated = try await actor.markExpiredCountdowns()
+            replaceSnapshots(updated)
+            await reconcileNotifications()
         }
     }
 
-    func updateSettings(_ settings: CountdownAppSettings) {
+    func updateSettings(_ settings: CountdownAppSettings) async {
+        let notificationsChanged = self.settings.notificationsEnabled != settings.notificationsEnabled
         self.settings = settings
         settingsStore.save(settings)
         WidgetCenter.shared.reloadTimelines(ofKind: CountdownConstants.widgetKind)
+        if notificationsChanged { await reconcileNotifications() }
     }
 
-    private func mutate(_ operation: () async throws -> Void) async {
+    func reconcileNotifications() async {
+        for snapshot in allSnapshots {
+            guard !Task.isCancelled else { return }
+            await scheduleNotification(for: snapshot.recalculated())
+        }
+    }
+
+    @discardableResult
+    private func mutate(_ operation: () async throws -> Void) async -> Bool {
         do {
+            errorMessage = nil
             try await operation()
             WidgetCenter.shared.reloadTimelines(ofKind: CountdownConstants.widgetKind)
             await refresh()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -248,41 +285,44 @@ final class CountdownStore {
         }
 
         await notificationScheduler.schedule(snapshot: snapshot)
+        // Preferences can change while the authorization dialog or scheduler is awaiting.
+        if !settings.notificationsEnabled {
+            await notificationScheduler.cancel(identifier: snapshot.notificationIdentifier)
+        }
     }
 
-    private func filteredSnapshots(from snapshots: [CountdownSnapshot]) -> [CountdownSnapshot] {
-        let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let selectedTagKeys = Set(activeFilter.tags.map(CountdownTagNormalizer.key(for:)))
-        let selectedCollectionKey = activeFilter.collectionName.map(CountdownCollectionNormalizer.key(for:))
+    // MARK: - Derived state
 
-        return snapshots
-            .filter { snapshot in
-                normalizedSearch.isEmpty
-                    || snapshot.title.localizedCaseInsensitiveContains(normalizedSearch)
-                    || snapshot.tags.contains { $0.localizedCaseInsensitiveContains(normalizedSearch) }
-                    || snapshot.collectionName?.localizedCaseInsensitiveContains(normalizedSearch) == true
-            }
-            .filter { snapshot in
-                activeFilter.status.includes(snapshot.status)
-            }
-            .filter { snapshot in
-                guard let selectedCollectionKey else {
-                    return true
-                }
+    private func applyFilters() {
+        snapshots = CountdownSnapshotQuery.apply(
+            to: sortedSnapshots, searchText: searchText, sort: nil, filter: activeFilter
+        )
+        if let selectedID, !snapshots.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
+    }
 
-                guard let collectionName = snapshot.collectionName else {
-                    return false
-                }
-
-                return CountdownCollectionNormalizer.key(for: collectionName) == selectedCollectionKey
+    private func replaceSnapshots(_ loaded: [CountdownSnapshot]) {
+        allSnapshots = loaded
+        updateSortedSnapshots()
+        availableTags = CountdownTagNormalizer.normalize(loaded.flatMap(\.tags))
+        availableCollections = CountdownCollectionNormalizer.normalize(loaded.compactMap(\.collectionName))
+        finishedCount = loaded.count { $0.status == .expired }
+        upcomingCount = loaded.count - finishedCount
+        var tags: [String: Int] = [:]
+        var collections: [String: Int] = [:]
+        for snapshot in loaded {
+            for tag in snapshot.tags { tags[CountdownTagNormalizer.key(for: tag), default: 0] += 1 }
+            if let name = snapshot.collectionName {
+                collections[CountdownCollectionNormalizer.key(for: name), default: 0] += 1
             }
-            .filter { snapshot in
-                guard !selectedTagKeys.isEmpty else {
-                    return true
-                }
+        }
+        tagCounts = tags
+        collectionCounts = collections
+        applyFilters()
+    }
 
-                let snapshotTagKeys = Set(snapshot.tags.map(CountdownTagNormalizer.key(for:)))
-                return selectedTagKeys.isSubset(of: snapshotTagKeys)
-            }
+    private func updateSortedSnapshots() {
+        sortedSnapshots = CountdownSnapshotQuery.apply(to: allSnapshots, sort: sort)
     }
 }

@@ -5,33 +5,36 @@ struct SettingsView: View {
     @Environment(CountdownStore.self) private var store
 
     var body: some View {
-        @Bindable var store = store
+        let settings = Binding(
+            get: { store.settings },
+            set: { value in Task { await store.updateSettings(value) } }
+        )
 
         Form {
             Section("Notifications") {
-                Toggle("Notify when countdowns finish", isOn: $store.settings.notificationsEnabled)
+                Toggle("Notify when countdowns finish", isOn: settings.notificationsEnabled)
+                    .accessibilityLabel("Notify when countdowns finish")
             }
 
             Section("Appearance") {
-                Picker("Theme", selection: $store.settings.themePreference) {
+                Picker("Theme", selection: settings.themePreference) {
                     ForEach(CountdownThemePreference.allCases) { theme in
                         Text(theme.title).tag(theme)
                     }
                 }
+                .accessibilityLabel("Theme")
 
-                Picker("Countdown Precision", selection: $store.settings.displayPrecision) {
+                Picker("Countdown Precision", selection: settings.displayPrecision) {
                     ForEach(CountdownDisplayPrecision.allCases) { precision in
                         Text(precision.title).tag(precision)
                     }
                 }
+                .accessibilityLabel("Countdown precision")
             }
 
         }
         .formStyle(.grouped)
         .padding(20)
         .frame(width: 460)
-        .onChange(of: store.settings) {
-            store.updateSettings(store.settings)
-        }
     }
 }
