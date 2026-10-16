@@ -15,19 +15,22 @@ public struct CountdownWidgetEntry: TimelineEntry, Sendable {
     public let selectedSnapshot: CountdownSnapshot?
     public let snapshots: [CountdownSnapshot]
     public let state: CountdownWidgetState
+    public let displayPrecision: CountdownDisplayPrecision
 
     public init(
         date: Date,
         configuration: CountdownWidgetConfigurationIntent,
         selectedSnapshot: CountdownSnapshot?,
         snapshots: [CountdownSnapshot],
-        state: CountdownWidgetState
+        state: CountdownWidgetState,
+        displayPrecision: CountdownDisplayPrecision
     ) {
         self.date = date
         self.configuration = configuration
         self.selectedSnapshot = selectedSnapshot
         self.snapshots = snapshots
         self.state = state
+        self.displayPrecision = displayPrecision
     }
 }
 
@@ -38,7 +41,8 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
             configuration: CountdownWidgetConfigurationIntent(),
             selectedSnapshot: .placeholder,
             snapshots: [.placeholder],
-            state: .ready
+            state: .ready,
+            displayPrecision: .automatic
         )
     }
 
@@ -55,13 +59,17 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
     ) async -> Timeline<CountdownWidgetEntry> {
         let now = Date()
         let entry = await entry(for: configuration, date: now)
-        return Timeline(entries: [entry], policy: .after(nextRefreshDate(for: entry, now: now)))
+        let entries = timelineEntries(from: entry, now: now)
+        let reloadDate = nextRefreshDate(for: entry, entries: entries, now: now)
+        return Timeline(entries: entries, policy: .after(reloadDate))
     }
 
     private func entry(
         for configuration: CountdownWidgetConfigurationIntent,
         date: Date
     ) async -> CountdownWidgetEntry {
+        let displayPrecision = CountdownSettingsStore().load().displayPrecision
+
         do {
             let container = try CountdownContainerFactory.makeSharedContainer()
             let actor = CountdownDataActor(modelContainer: container)
@@ -73,7 +81,8 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
                     configuration: configuration,
                     selectedSnapshot: nil,
                     snapshots: [],
-                    state: .empty
+                    state: .empty,
+                    displayPrecision: displayPrecision
                 )
             }
 
@@ -83,7 +92,8 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
                 configuration: configuration,
                 selectedSnapshot: selected,
                 snapshots: snapshots,
-                state: .ready
+                state: .ready,
+                displayPrecision: displayPrecision
             )
         } catch {
             return CountdownWidgetEntry(
@@ -91,7 +101,8 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
                 configuration: configuration,
                 selectedSnapshot: nil,
                 snapshots: [],
-                state: .unavailable
+                state: .unavailable,
+                displayPrecision: displayPrecision
             )
         }
     }
@@ -118,7 +129,69 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
             return now.addingTimeInterval(15 * 60)
         }
 
+        if displaysSeconds(
+            remainingSeconds: selected.remainingSeconds,
+            precision: entry.displayPrecision
+        ) {
+            return now.addingTimeInterval(min(secondsUntilTarget, 60))
+        }
+
         return now.addingTimeInterval(max(5 * 60, min(secondsUntilTarget, 60 * 60)))
+    }
+
+    private func nextRefreshDate(
+        for entry: CountdownWidgetEntry,
+        entries: [CountdownWidgetEntry],
+        now: Date
+    ) -> Date {
+        guard entries.count > 1, let lastEntryDate = entries.last?.date else {
+            return nextRefreshDate(for: entry, now: now)
+        }
+
+        return lastEntryDate.addingTimeInterval(1)
+    }
+
+    private func timelineEntries(
+        from entry: CountdownWidgetEntry,
+        now: Date
+    ) -> [CountdownWidgetEntry] {
+        guard let selected = entry.selectedSnapshot,
+              selected.status == .running,
+              displaysSeconds(
+                remainingSeconds: selected.remainingSeconds,
+                precision: entry.displayPrecision
+              ) else {
+            return [entry]
+        }
+
+        let entryCount = max(1, min(5 * 60, Int(ceil(selected.remainingSeconds)) + 1))
+        return (0..<entryCount).map { offset in
+            let date = now.addingTimeInterval(TimeInterval(offset))
+            return CountdownWidgetEntry(
+                date: date,
+                configuration: entry.configuration,
+                selectedSnapshot: selected.recalculated(now: date),
+                snapshots: entry.snapshots,
+                state: entry.state,
+                displayPrecision: entry.displayPrecision
+            )
+        }
+    }
+
+    private func displaysSeconds(
+        remainingSeconds: TimeInterval,
+        precision: CountdownDisplayPrecision
+    ) -> Bool {
+        let parts = CountdownFormatter.parts(from: remainingSeconds)
+
+        switch precision {
+        case .full:
+            return true
+        case .automatic:
+            return parts.days == 0
+        case .compact:
+            return parts.days == 0 && parts.hours == 0
+        }
     }
 }
 

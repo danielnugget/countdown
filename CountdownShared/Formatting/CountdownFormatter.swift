@@ -37,7 +37,7 @@ public enum CountdownFormatter {
             if parts.minutes > 0 { return "\(parts.minutes)m \(parts.seconds)s" }
             return "\(parts.seconds)s"
         case .full:
-            return fullString(parts: parts, separator: "\n")
+            return fullString(parts: parts, separator: "\n", includesZeroFields: true)
         case .automatic:
             if parts.days > 0 {
                 return "\(parts.days)d \(parts.hours)h"
@@ -58,7 +58,20 @@ public enum CountdownFormatter {
         return "\(prefix) \(fullString(parts: parts(from: remainingSeconds), separator: ", "))"
     }
 
-    private static func fullString(parts: CountdownTimeParts, separator: String) -> String {
+    private static func fullString(
+        parts: CountdownTimeParts,
+        separator: String,
+        includesZeroFields: Bool = false
+    ) -> String {
+        if includesZeroFields {
+            return [
+                "\(parts.days) \(parts.days == 1 ? "day" : "days")",
+                "\(parts.hours) \(parts.hours == 1 ? "hour" : "hours")",
+                "\(parts.minutes) \(parts.minutes == 1 ? "minute" : "minutes")",
+                "\(parts.seconds) \(parts.seconds == 1 ? "second" : "seconds")"
+            ].joined(separator: separator)
+        }
+
         var components: [String] = []
         if parts.days > 0 { components.append("\(parts.days) \(parts.days == 1 ? "day" : "days")") }
         if parts.hours > 0 { components.append("\(parts.hours) \(parts.hours == 1 ? "hour" : "hours")") }

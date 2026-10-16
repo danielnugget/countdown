@@ -7,15 +7,21 @@ import XCTest
 final class CountdownWidgetSnapshotTests: XCTestCase {
     func testSmallMediumAndLargeWidgetCardsRender() throws {
         for family in [WidgetFamily.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge] {
-            let renderer = ImageRenderer(content: CountdownWidgetCard(snapshot: sampleSnapshot, family: family)
-                .padding()
-                .frame(width: width(for: family), height: height(for: family)))
-            renderer.scale = 2
-            let image = renderer.nsImage
+            for precision in CountdownDisplayPrecision.allCases {
+                let renderer = ImageRenderer(content: CountdownWidgetCard(
+                    snapshot: sampleSnapshot,
+                    family: family,
+                    displayPrecision: precision
+                )
+                    .padding()
+                    .frame(width: width(for: family), height: height(for: family)))
+                renderer.scale = 2
+                let image = renderer.nsImage
 
-            XCTAssertNotNil(image)
-            XCTAssertGreaterThan(image?.size.width ?? 0, 0)
-            XCTAssertGreaterThan(image?.size.height ?? 0, 0)
+                XCTAssertNotNil(image)
+                XCTAssertGreaterThan(image?.size.width ?? 0, 0)
+                XCTAssertGreaterThan(image?.size.height ?? 0, 0)
+            }
         }
     }
 

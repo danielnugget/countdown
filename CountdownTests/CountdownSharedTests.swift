@@ -11,6 +11,14 @@ final class CountdownSharedTests: XCTestCase {
             CountdownFormatter.string(remainingSeconds: 90_099, precision: .full),
             "1 day\n1 hour\n1 minute\n39 seconds"
         )
+        XCTAssertEqual(
+            CountdownFormatter.string(remainingSeconds: 65, precision: .full),
+            "0 days\n0 hours\n1 minute\n5 seconds"
+        )
+        XCTAssertEqual(
+            CountdownFormatter.string(remainingSeconds: 0, precision: .full),
+            "0 days\n0 hours\n0 minutes\n0 seconds"
+        )
     }
 
     func testProgressClampsBetweenZeroAndOne() {

@@ -129,7 +129,12 @@ struct ContentView: View {
             editorMode = .createDate
         }
         .sheet(item: $editorMode) { mode in
-            CountdownEditorView(mode: mode, suggestedCollectionName: store.selectedCollectionName) { request in
+            CountdownEditorView(
+                mode: mode,
+                suggestedCollectionName: store.selectedCollectionName,
+                collectionSuggestions: store.availableCollections,
+                tagSuggestions: store.availableTags
+            ) { request in
                 Task {
                     await save(request)
                     editorMode = nil

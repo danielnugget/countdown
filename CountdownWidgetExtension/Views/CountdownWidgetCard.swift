@@ -5,10 +5,16 @@ import WidgetKit
 public struct CountdownWidgetCard: View {
     public let snapshot: CountdownSnapshot
     public let family: WidgetFamily
+    public let displayPrecision: CountdownDisplayPrecision
 
-    public init(snapshot: CountdownSnapshot, family: WidgetFamily) {
+    public init(
+        snapshot: CountdownSnapshot,
+        family: WidgetFamily,
+        displayPrecision: CountdownDisplayPrecision = .automatic
+    ) {
         self.snapshot = snapshot
         self.family = family
+        self.displayPrecision = displayPrecision
     }
 
     public var body: some View {
@@ -29,9 +35,9 @@ public struct CountdownWidgetCard: View {
             header
             Spacer(minLength: 4)
             liveTimeText
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
+                .font(timeFont)
                 .minimumScaleFactor(0.65)
-                .lineLimit(1)
+                .lineLimit(timeLineLimit)
             finishedStatusLine
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -45,9 +51,9 @@ public struct CountdownWidgetCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 header
                 liveTimeText
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .font(timeFont)
                     .minimumScaleFactor(0.7)
-                    .lineLimit(1)
+                    .lineLimit(timeLineLimit)
                 finishedStatusLine
             }
             Spacer(minLength: 0)
@@ -65,9 +71,9 @@ public struct CountdownWidgetCard: View {
             }
 
             liveTimeText
-                .font(.system(size: 44, weight: .semibold, design: .rounded))
+                .font(timeFont)
                 .minimumScaleFactor(0.6)
-                .lineLimit(1)
+                .lineLimit(timeLineLimit)
 
             Divider()
 
@@ -99,16 +105,11 @@ public struct CountdownWidgetCard: View {
 
     @ViewBuilder
     private var liveTimeText: some View {
-        let now = Date()
-        let resolvedSnapshot = snapshot.recalculated(now: now)
-
-        if resolvedSnapshot.status == .running, resolvedSnapshot.targetDate > now {
-            Text(timerInterval: now...resolvedSnapshot.targetDate, countsDown: true, showsHours: true)
-                .monospacedDigit()
-        } else {
-            Text(CountdownFormatter.string(remainingSeconds: resolvedSnapshot.remainingSeconds))
-                .monospacedDigit()
-        }
+        Text(CountdownFormatter.string(
+            remainingSeconds: snapshot.remainingSeconds,
+            precision: displayPrecision
+        ))
+        .monospacedDigit()
     }
 
     @ViewBuilder
@@ -142,6 +143,32 @@ public struct CountdownWidgetCard: View {
         case "gray": .gray
         default: .blue
         }
+    }
+
+    private var timeFont: Font {
+        if displayPrecision == .full {
+            switch family {
+            case .systemSmall:
+                return .system(size: 15, weight: .semibold, design: .rounded)
+            case .systemMedium:
+                return .system(size: 20, weight: .semibold, design: .rounded)
+            default:
+                return .system(size: 28, weight: .semibold, design: .rounded)
+            }
+        }
+
+        switch family {
+        case .systemSmall:
+            return .system(size: 26, weight: .semibold, design: .rounded)
+        case .systemMedium:
+            return .system(size: 30, weight: .semibold, design: .rounded)
+        default:
+            return .system(size: 44, weight: .semibold, design: .rounded)
+        }
+    }
+
+    private var timeLineLimit: Int {
+        displayPrecision == .full ? 4 : 1
     }
 }
 

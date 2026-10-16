@@ -14,7 +14,11 @@ public struct CountdownWidgetView: View {
         switch entry.state {
         case .ready:
             if let snapshot = entry.selectedSnapshot {
-                CountdownWidgetCard(snapshot: snapshot, family: family)
+                CountdownWidgetCard(
+                    snapshot: snapshot,
+                    family: family,
+                    displayPrecision: entry.displayPrecision
+                )
                     .widgetURL(CountdownURL.countdown(id: snapshot.id))
             } else {
                 WidgetMessageView(title: "No Countdown", message: "Create one in the app.")

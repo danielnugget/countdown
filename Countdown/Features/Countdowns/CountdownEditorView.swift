@@ -68,6 +68,8 @@ struct CountdownEditorView: View {
     let mode: CountdownEditorMode
     let onSave: (CountdownEditorRequest) -> Void
     let onCancel: () -> Void
+    private let collectionSuggestions: [String]
+    private let tagSuggestions: [String]
 
     @State private var title: String
     @State private var targetDate: Date
@@ -199,18 +201,22 @@ struct CountdownEditorView: View {
         CountdownEditorSymbol(id: "graduationcap.fill", title: "Graduation", keywords: ["school", "education", "ceremony"]),
         CountdownEditorSymbol(id: "backpack", title: "School Bag", keywords: ["school", "education", "travel"])
     ]
-    private let colorColumns = [GridItem(.adaptive(minimum: 28, maximum: 28), spacing: 12)]
-    private let symbolColumns = [GridItem(.adaptive(minimum: 104, maximum: 128), spacing: 8)]
+    private let colorColumns = [GridItem(.adaptive(minimum: 24, maximum: 24), spacing: 10)]
+    private let symbolColumns = [GridItem(.adaptive(minimum: 96, maximum: 120), spacing: 6)]
 
     init(
         mode: CountdownEditorMode,
         suggestedCollectionName: String? = nil,
+        collectionSuggestions: [String] = [],
+        tagSuggestions: [String] = [],
         onSave: @escaping (CountdownEditorRequest) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.mode = mode
         self.onSave = onSave
         self.onCancel = onCancel
+        self.collectionSuggestions = CountdownCollectionNormalizer.normalize(collectionSuggestions)
+        self.tagSuggestions = CountdownTagNormalizer.normalize(tagSuggestions)
 
         switch mode {
         case .createDate:
@@ -236,34 +242,46 @@ struct CountdownEditorView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 preview
 
                 field("Title") {
                     TextField("Countdown title", text: $title)
                         .textFieldStyle(.roundedBorder)
-                        .controlSize(.large)
+                        .controlSize(.small)
                 }
 
-                field("Target") {
-                    DatePicker(
-                        "",
-                        selection: $targetDate,
-                        in: Date().addingTimeInterval(1)...,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                HStack(alignment: .top, spacing: 12) {
+                    field("Target") {
+                        DatePicker(
+                            "",
+                            selection: $targetDate,
+                            in: Date().addingTimeInterval(1)...,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
-                field("Collection") {
-                    TextField("Collection name", text: $collectionName)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Collection name")
+                    field("Collection") {
+                        VStack(alignment: .leading, spacing: 5) {
+                            TextField("Collection name", text: $collectionName)
+                                .textFieldStyle(.roundedBorder)
+                                .controlSize(.small)
+                                .accessibilityLabel("Collection name")
+
+                            if !matchingCollectionSuggestions.isEmpty {
+                                suggestionRow(matchingCollectionSuggestions, systemImage: "folder") { suggestion in
+                                    collectionName = suggestion
+                                }
+                            }
+                        }
+                    }
                 }
 
                 field("Color") {
-                    LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 12) {
+                    LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 10) {
                         ForEach(colors, id: \.self) { color in
                             colorButton(color)
                         }
@@ -271,7 +289,7 @@ struct CountdownEditorView: View {
                 }
 
                 field("Tags") {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
                         if tags.isEmpty {
                             Text("No tags")
                                 .font(.caption)
@@ -289,6 +307,7 @@ struct CountdownEditorView: View {
                         HStack(spacing: 8) {
                             TextField("Add tag", text: $tagDraft)
                                 .textFieldStyle(.roundedBorder)
+                                .controlSize(.small)
                                 .onSubmit(addTagDraft)
                                 .onChange(of: tagDraft) {
                                     if tagDraft.contains(",") {
@@ -301,40 +320,50 @@ struct CountdownEditorView: View {
                                 Label("Add Tag", systemImage: "plus")
                             }
                             .labelStyle(.iconOnly)
+                            .controlSize(.small)
                             .disabled(tagDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .help("Add Tag")
                             .accessibilityLabel("Add tag")
+                        }
+
+                        if !matchingTagSuggestions.isEmpty {
+                            suggestionRow(matchingTagSuggestions, systemImage: "tag") { suggestion in
+                                tags = CountdownTagNormalizer.normalize(tags + [suggestion])
+                                tagDraft = ""
+                            }
                         }
                     }
                 }
 
                 field("Symbol") {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
                         TextField("Search symbols", text: $symbolSearchText)
                             .textFieldStyle(.roundedBorder)
+                            .controlSize(.small)
                             .accessibilityLabel("Search symbols")
-
-                        ScrollView {
-                            LazyVGrid(columns: symbolColumns, alignment: .leading, spacing: 8) {
-                                ForEach(filteredSymbols) { symbol in
-                                    symbolButton(symbol)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 2)
-                        }
-                        .frame(height: 176)
-                        .accessibilityLabel("Symbol options")
 
                         if filteredSymbols.isEmpty {
                             Text("No matching symbols")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        } else {
+                            ScrollView {
+                                LazyVGrid(columns: symbolColumns, alignment: .leading, spacing: 6) {
+                                    ForEach(filteredSymbols) { symbol in
+                                        symbolButton(symbol)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 2)
+                            }
+                            .frame(height: 128)
+                            .accessibilityLabel("Symbol options")
                         }
                     }
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
 
             Divider()
 
@@ -358,26 +387,26 @@ struct CountdownEditorView: View {
                 .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.vertical, 12)
         }
         .frame(width: 520)
     }
 
     private var preview: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             CountdownRingView(
                 progress: previewProgress,
-                lineWidth: 8,
+                lineWidth: 6,
                 accentColor: colorName.countdownColor
             )
-            .frame(width: 72, height: 72)
+            .frame(width: 52, height: 52)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: symbolName)
                         .foregroundStyle(colorName.countdownColor)
                     Text(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Countdown" : title)
-                        .font(.headline)
+                        .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                 }
 
@@ -385,7 +414,7 @@ struct CountdownEditorView: View {
                     remainingSeconds: max(0, targetDate.timeIntervalSinceNow),
                     precision: .compact
                 ))
-                .font(.title3.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .monospacedDigit()
 
                 if !tags.isEmpty {
@@ -399,45 +428,60 @@ struct CountdownEditorView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Countdown preview")
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: symbolName)
-                .font(.title2)
+                .font(.headline)
                 .foregroundStyle(colorName.countdownColor)
-                .frame(width: 32, height: 32)
+                .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(mode.title)
-                    .font(.title2.bold())
-                Text(headerSubtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.headline)
             }
 
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 18)
-    }
-
-    private var headerSubtitle: String {
-        switch mode {
-        case .createDate:
-            "Choose a title and target date."
-        case .edit:
-            "Update countdown details."
-        }
+        .padding(.vertical, 12)
     }
 
     private var filteredSymbols: [CountdownEditorSymbol] {
         let query = symbolSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return symbols.filter { $0.matches(query) }
+    }
+
+    private var matchingCollectionSuggestions: [String] {
+        let query = collectionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+
+        let queryKey = CountdownCollectionNormalizer.key(for: query)
+        return collectionSuggestions.filter {
+            let suggestionKey = CountdownCollectionNormalizer.key(for: $0)
+            return suggestionKey != queryKey && suggestionKey.hasPrefix(queryKey)
+        }
+        .prefix(4)
+        .map { $0 }
+    }
+
+    private var matchingTagSuggestions: [String] {
+        let query = tagDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+
+        let selectedTagKeys = Set(tags.map(CountdownTagNormalizer.key(for:)))
+        let queryKey = CountdownTagNormalizer.key(for: query)
+        return tagSuggestions.filter {
+            let suggestionKey = CountdownTagNormalizer.key(for: $0)
+            return !selectedTagKeys.contains(suggestionKey) && suggestionKey.hasPrefix(queryKey)
+        }
+        .prefix(4)
+        .map { $0 }
     }
 
     private var previewProgress: Double {
@@ -452,9 +496,9 @@ struct CountdownEditorView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
             content()
         }
     }
@@ -465,7 +509,7 @@ struct CountdownEditorView: View {
         } label: {
             Circle()
                 .fill(color.countdownColor)
-                .frame(width: 28, height: 28)
+                .frame(width: 24, height: 24)
                 .overlay {
                     Circle()
                         .stroke(colorName == color ? Color.primary : Color.secondary.opacity(0.28), lineWidth: colorName == color ? 2 : 1)
@@ -488,11 +532,11 @@ struct CountdownEditorView: View {
         Button {
             symbolName = symbol.id
         } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Image(systemName: symbol.id)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(symbolName == symbol.id ? Color.accentColor : Color.primary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(symbol.title)
@@ -503,14 +547,14 @@ struct CountdownEditorView: View {
 
                 if symbolName == symbol.id {
                     Image(systemName: "checkmark")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.accentColor)
-                        .frame(width: 12)
+                        .frame(width: 10)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 42)
-            .padding(.horizontal, 8)
+            .frame(height: 34)
+            .padding(.horizontal, 7)
             .background {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(symbolName == symbol.id ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08))
@@ -524,6 +568,33 @@ struct CountdownEditorView: View {
         .help(symbol.title)
         .accessibilityLabel(symbol.title)
         .accessibilityAddTraits(symbolName == symbol.id ? .isSelected : [])
+    }
+
+    private func suggestionRow(
+        _ suggestions: [String],
+        systemImage: String,
+        onSelect: @escaping (String) -> Void
+    ) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(suggestions, id: \.self) { suggestion in
+                    Button {
+                        onSelect(suggestion)
+                    } label: {
+                        Label(suggestion, systemImage: systemImage)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(suggestion)
+                    .accessibilityLabel("Use \(suggestion)")
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
     }
 
     private func tagButton(_ tag: String) -> some View {
